@@ -25,6 +25,8 @@ type Job = {
   source: string
   repost_count: number
   date_posted: string
+  data_quality: string
+  imported_at: string
 }
 
 export default function Home() {
@@ -42,6 +44,7 @@ export default function Home() {
   const [search, setSearch] = useState('')
 
   async function handleSubmit() {
+    const now = new Date().toISOString()
     const detectedSource = detectSource(url)
 
     const { error } = await supabase.from('jobs').insert({
@@ -55,8 +58,12 @@ export default function Home() {
       notes,
       source: detectedSource,
       status: 'active',
-      first_seen: new Date().toISOString(),
-      last_seen: new Date().toISOString(),
+      first_seen: now,
+      last_seen: now,
+      data_quality: notes.toLowerCase().includes('imported')
+        ? 'imported'
+        : 'manual',
+      imported_at: notes.toLowerCase().includes('imported') ? now : null,
     })
 
     if (error) {
@@ -95,22 +102,68 @@ export default function Home() {
       setRemoteType('')
       setNotes('Imported from structured job posting data')
       setUrl(quickUrl)
-
       setQuickUrl('')
 
-      alert('Job data imported!')
+      alert('Job data imported! Review it, then click Save Job.')
     } catch {
       alert('Failed to import job')
     }
   }
 
-  function detectSource(url: string) {
-    if (url.includes('greenhouse')) return 'Greenhouse'
-    if (url.includes('lever')) return 'Lever'
-    if (url.includes('ashby')) return 'Ashby'
-    if (url.includes('linkedin')) return 'LinkedIn'
+  async function updateJobStatus(id: number, status: string) {
+    const updatePayload =
+      status === 'reposted'
+        ? {
+            status,
+            last_seen: new Date().toISOString(),
+          }
+        : {
+            status,
+            last_seen: new Date().toISOString(),
+          }
 
-    return 'Manual'
+    const { error } = await supabase
+      .from('jobs')
+      .update(updatePayload)
+      .eq('id', id)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    await loadJobs()
+  }
+
+  async function markReposted(job: Job) {
+    const { error } = await supabase
+      .from('jobs')
+      .update({
+        status: 'reposted',
+        repost_count: (job.repost_count || 0) + 1,
+        last_seen: new Date().toISOString(),
+      })
+      .eq('id', job.id)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    await loadJobs()
+  }
+
+  function detectSource(url: string) {
+    const lowerUrl = url.toLowerCase()
+
+    if (lowerUrl.includes('greenhouse')) return 'Greenhouse'
+    if (lowerUrl.includes('lever')) return 'Lever'
+    if (lowerUrl.includes('ashby')) return 'Ashby'
+    if (lowerUrl.includes('linkedin')) return 'LinkedIn'
+    if (lowerUrl.includes('indeed')) return 'Indeed'
+    if (lowerUrl.includes('workday')) return 'Workday'
+
+    return url ? 'Other' : 'Manual'
   }
 
   function clearForm() {
@@ -142,10 +195,7 @@ export default function Home() {
 
     if (!confirmed) return
 
-    const { error } = await supabase
-      .from('jobs')
-      .delete()
-      .eq('id', id)
+    const { error } = await supabase.from('jobs').delete().eq('id', id)
 
     if (error) {
       alert(error.message)
@@ -168,25 +218,41 @@ export default function Home() {
       jobs.map((job) => job.location).filter(Boolean)
     ).size
 
-    const remoteJobs = jobs.filter((job) =>
-      job.remote_type?.toLowerCase().includes('remote')
+    const activeJobs = jobs.filter(
+      (job) => (job.status || 'active').toLowerCase() === 'active'
     ).length
 
-    const activeJobs = jobs.filter(
-      (job) => job.status?.toLowerCase() === 'active'
+    const removedJobs = jobs.filter(
+      (job) => job.status?.toLowerCase() === 'removed'
     ).length
 
     const repostedJobs = jobs.filter(
-      (job) => (job.repost_count || 0) > 0
+      (job) =>
+        job.status?.toLowerCase() === 'reposted' ||
+        (job.repost_count || 0) > 0
     ).length
+
+    const importedJobs = jobs.filter(
+      (job) => job.data_quality?.toLowerCase() === 'imported'
+    ).length
+
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+    const newThisWeek = jobs.filter((job) => {
+      if (!job.first_seen) return false
+      return new Date(job.first_seen) >= sevenDaysAgo
+    }).length
 
     return {
       totalJobs: jobs.length,
       uniqueCompanies,
       uniqueLocations,
-      remoteJobs,
       activeJobs,
+      removedJobs,
       repostedJobs,
+      importedJobs,
+      newThisWeek,
     }
   }, [jobs])
 
@@ -198,7 +264,9 @@ export default function Home() {
       job.title?.toLowerCase().includes(searchText) ||
       job.location?.toLowerCase().includes(searchText) ||
       job.pay_range?.toLowerCase().includes(searchText) ||
-      job.source?.toLowerCase().includes(searchText)
+      job.source?.toLowerCase().includes(searchText) ||
+      job.status?.toLowerCase().includes(searchText) ||
+      job.data_quality?.toLowerCase().includes(searchText)
     )
   })
 
@@ -211,6 +279,14 @@ export default function Home() {
   )
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
+
+  const sourceBreakdown = Object.entries(
+    jobs.reduce<Record<string, number>>((acc, job) => {
+      const source = job.source || detectSource(job.url || '')
+      acc[source] = (acc[source] || 0) + 1
+      return acc
+    }, {})
+  ).sort((a, b) => b[1] - a[1])
 
   return (
     <main className="min-h-screen bg-[#070A12] text-gray-100">
@@ -225,11 +301,7 @@ export default function Home() {
               <p className="text-blue-300 uppercase tracking-[0.25em] text-sm">
                 Hiring Intelligence Platform
               </p>
-
-              <h1 className="text-5xl font-black tracking-tight">
-                JobTrace
-              </h1>
-
+              <h1 className="text-5xl font-black tracking-tight">JobTrace</h1>
               <p className="text-gray-400 mt-1">
                 Track hiring activity, reposted jobs, locations, and labor market signals.
               </p>
@@ -242,19 +314,20 @@ export default function Home() {
           </div>
         </header>
 
-        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <Metric label="Tracked Jobs" value={metrics.totalJobs} />
+        <section className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+          <Metric label="Tracked" value={metrics.totalJobs} />
+          <Metric label="Active" value={metrics.activeJobs} />
+          <Metric label="Removed" value={metrics.removedJobs} />
+          <Metric label="Reposted" value={metrics.repostedJobs} />
+          <Metric label="New Week" value={metrics.newThisWeek} />
+          <Metric label="Imported" value={metrics.importedJobs} />
           <Metric label="Companies" value={metrics.uniqueCompanies} />
           <Metric label="Locations" value={metrics.uniqueLocations} />
-          <Metric label="Remote" value={metrics.remoteJobs} />
-          <Metric label="Active" value={metrics.activeJobs} />
-          <Metric label="Reposted" value={metrics.repostedJobs} />
         </section>
 
         <section className="border border-blue-900/50 bg-blue-950/20 rounded-2xl p-5 space-y-4">
           <div>
             <h2 className="text-2xl font-bold">Quick Import</h2>
-
             <p className="text-gray-400">
               Paste a job URL and JobTrace will attempt to extract structured hiring data.
             </p>
@@ -312,29 +385,48 @@ export default function Home() {
             </button>
           </section>
 
-          <aside className="border border-gray-800 bg-gray-900/80 rounded-2xl p-5 space-y-4">
-            <h2 className="text-2xl font-bold">Top Companies</h2>
+          <aside className="space-y-6">
+            <div className="border border-gray-800 bg-gray-900/80 rounded-2xl p-5 space-y-4">
+              <h2 className="text-2xl font-bold">Top Companies</h2>
 
-            {topCompanies.length === 0 ? (
-              <p className="text-gray-500">No tracked companies yet.</p>
-            ) : (
-              topCompanies.map(([name, count]) => (
-                <div
-                  key={name}
-                  className="flex justify-between border-b border-gray-800 pb-2"
-                >
-                  <span>{name}</span>
-                  <span className="text-blue-300">{count}</span>
-                </div>
-              ))
-            )}
+              {topCompanies.length === 0 ? (
+                <p className="text-gray-500">No tracked companies yet.</p>
+              ) : (
+                topCompanies.map(([name, count]) => (
+                  <div
+                    key={name}
+                    className="flex justify-between border-b border-gray-800 pb-2"
+                  >
+                    <span>{name}</span>
+                    <span className="text-blue-300">{count}</span>
+                  </div>
+                ))
+              )}
+            </div>
 
-            <div className="pt-4">
-              <h3 className="font-semibold">Tracking Pipeline</h3>
+            <div className="border border-gray-800 bg-gray-900/80 rounded-2xl p-5 space-y-4">
+              <h2 className="text-2xl font-bold">Sources</h2>
 
-              <p className="text-sm text-gray-400 mt-2">
-                Import → Extract → Track → Recheck → Detect Reposts
-              </p>
+              {sourceBreakdown.length === 0 ? (
+                <p className="text-gray-500">No source data yet.</p>
+              ) : (
+                sourceBreakdown.map(([source, count]) => (
+                  <div
+                    key={source}
+                    className="flex justify-between border-b border-gray-800 pb-2"
+                  >
+                    <span>{source}</span>
+                    <span className="text-blue-300">{count}</span>
+                  </div>
+                ))
+              )}
+
+              <div className="pt-4">
+                <h3 className="font-semibold">Tracking Pipeline</h3>
+                <p className="text-sm text-gray-400 mt-2">
+                  Import → Extract → Track → Recheck → Detect Reposts
+                </p>
+              </div>
             </div>
           </aside>
         </section>
@@ -377,10 +469,12 @@ export default function Home() {
                   {job.employment_type && <Badge>{job.employment_type}</Badge>}
                   {job.remote_type && <Badge>{job.remote_type}</Badge>}
                   {job.source && <Badge>{job.source}</Badge>}
+                  <Badge>{job.status || 'active'}</Badge>
+                  <Badge>{job.data_quality || 'manual'}</Badge>
                 </div>
 
                 <div className="text-sm text-gray-400 space-y-1">
-                  <p>Status: {job.status || 'active'}</p>
+                  <p>Tracked for: {getDaysTracked(job.first_seen)} days</p>
 
                   <p>
                     First Seen:{' '}
@@ -397,6 +491,29 @@ export default function Home() {
                   </p>
 
                   <p>Reposts Detected: {job.repost_count || 0}</p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="border border-green-700 text-green-300 px-3 py-1 rounded-full text-sm"
+                    onClick={() => updateJobStatus(job.id, 'active')}
+                  >
+                    Active
+                  </button>
+
+                  <button
+                    className="border border-yellow-700 text-yellow-300 px-3 py-1 rounded-full text-sm"
+                    onClick={() => updateJobStatus(job.id, 'removed')}
+                  >
+                    Removed
+                  </button>
+
+                  <button
+                    className="border border-blue-700 text-blue-300 px-3 py-1 rounded-full text-sm"
+                    onClick={() => markReposted(job)}
+                  >
+                    Reposted
+                  </button>
                 </div>
 
                 {job.notes && (
@@ -421,17 +538,20 @@ export default function Home() {
   )
 }
 
-function Metric({
-  label,
-  value,
-}: {
-  label: string
-  value: number
-}) {
+function getDaysTracked(firstSeen: string) {
+  if (!firstSeen) return 0
+
+  const first = new Date(firstSeen)
+  const now = new Date()
+  const difference = now.getTime() - first.getTime()
+
+  return Math.max(0, Math.floor(difference / (1000 * 60 * 60 * 24)))
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="border border-gray-800 bg-gray-900/80 rounded-2xl p-4">
       <p className="text-sm text-gray-400">{label}</p>
-
       <p className="text-3xl font-black">{value}</p>
     </div>
   )
@@ -456,11 +576,7 @@ function Input({
   )
 }
 
-function Badge({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+function Badge({ children }: { children: React.ReactNode }) {
   return (
     <span className="border border-gray-700 bg-gray-950 rounded-full px-3 py-1 text-gray-300">
       {children}
