@@ -19,6 +19,12 @@ type Job = {
   remote_type: string
   notes: string
   created_at: string
+  first_seen: string
+  last_seen: string
+  status: string
+  source: string
+  repost_count: number
+  date_posted: string
 }
 
 export default function Home() {
@@ -36,6 +42,8 @@ export default function Home() {
   const [search, setSearch] = useState('')
 
   async function handleSubmit() {
+    const detectedSource = detectSource(url)
+
     const { error } = await supabase.from('jobs').insert({
       company,
       title,
@@ -45,6 +53,10 @@ export default function Home() {
       employment_type: employmentType,
       remote_type: remoteType,
       notes,
+      source: detectedSource,
+      status: 'active',
+      first_seen: new Date().toISOString(),
+      last_seen: new Date().toISOString(),
     })
 
     if (error) {
@@ -86,10 +98,19 @@ export default function Home() {
 
       setQuickUrl('')
 
-      alert('Job data imported! Review it, then click Save Job.')
+      alert('Job data imported!')
     } catch {
       alert('Failed to import job')
     }
+  }
+
+  function detectSource(url: string) {
+    if (url.includes('greenhouse')) return 'Greenhouse'
+    if (url.includes('lever')) return 'Lever'
+    if (url.includes('ashby')) return 'Ashby'
+    if (url.includes('linkedin')) return 'LinkedIn'
+
+    return 'Manual'
   }
 
   function clearForm() {
@@ -107,7 +128,7 @@ export default function Home() {
     const { data, error } = await supabase
       .from('jobs')
       .select('*')
-      .order('created_at', { ascending: false })
+      .order('first_seen', { ascending: false })
 
     if (error) {
       alert(error.message)
@@ -116,25 +137,23 @@ export default function Home() {
     }
   }
 
- 
   async function deleteJob(id: number) {
-  const confirmed = confirm('Delete this job?')
+    const confirmed = confirm('Delete this job?')
 
-  if (!confirmed) return
+    if (!confirmed) return
 
-  const { error } = await supabase
-    .from('jobs')
-    .delete()
-    .eq('id', id)
+    const { error } = await supabase
+      .from('jobs')
+      .delete()
+      .eq('id', id)
 
-  if (error) {
-    console.error(error)
-    alert(error.message)
-    return
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setJobs((prev) => prev.filter((job) => job.id !== id))
   }
-
-  setJobs((prev) => prev.filter((job) => job.id !== id))
-}
 
   useEffect(() => {
     loadJobs()
@@ -153,12 +172,12 @@ export default function Home() {
       job.remote_type?.toLowerCase().includes('remote')
     ).length
 
-    const hybridJobs = jobs.filter((job) =>
-      job.remote_type?.toLowerCase().includes('hybrid')
+    const activeJobs = jobs.filter(
+      (job) => job.status?.toLowerCase() === 'active'
     ).length
 
-    const onsiteJobs = jobs.filter((job) =>
-      job.remote_type?.toLowerCase().includes('onsite')
+    const repostedJobs = jobs.filter(
+      (job) => (job.repost_count || 0) > 0
     ).length
 
     return {
@@ -166,8 +185,8 @@ export default function Home() {
       uniqueCompanies,
       uniqueLocations,
       remoteJobs,
-      hybridJobs,
-      onsiteJobs,
+      activeJobs,
+      repostedJobs,
     }
   }, [jobs])
 
@@ -179,9 +198,7 @@ export default function Home() {
       job.title?.toLowerCase().includes(searchText) ||
       job.location?.toLowerCase().includes(searchText) ||
       job.pay_range?.toLowerCase().includes(searchText) ||
-      job.employment_type?.toLowerCase().includes(searchText) ||
-      job.remote_type?.toLowerCase().includes(searchText) ||
-      job.notes?.toLowerCase().includes(searchText)
+      job.source?.toLowerCase().includes(searchText)
     )
   })
 
@@ -197,44 +214,49 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#070A12] text-gray-100">
-      <div className="max-w-6xl mx-auto p-6 md:p-10 space-y-8">
-        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-white text-black flex items-center justify-center font-black text-2xl shadow-lg">
+      <div className="max-w-7xl mx-auto p-6 md:p-10 space-y-8">
+        <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <div className="h-16 w-16 rounded-3xl bg-white text-black flex items-center justify-center font-black text-2xl shadow-lg">
               JT
             </div>
 
             <div>
-              <p className="text-sm text-blue-300 uppercase tracking-[0.25em]">
-                Hiring Intelligence
+              <p className="text-blue-300 uppercase tracking-[0.25em] text-sm">
+                Hiring Intelligence Platform
               </p>
-              <h1 className="text-5xl font-black tracking-tight">JobTrace</h1>
+
+              <h1 className="text-5xl font-black tracking-tight">
+                JobTrace
+              </h1>
+
               <p className="text-gray-400 mt-1">
-                Track job postings, pay movement, locations, and hiring signals.
+                Track hiring activity, reposted jobs, locations, and labor market signals.
               </p>
             </div>
           </div>
 
-          <div className="border border-gray-800 bg-gray-900/70 rounded-2xl p-4">
-            <p className="text-sm text-gray-400">Live Deployment</p>
-            <p className="font-semibold text-green-400">Connected</p>
+          <div className="border border-gray-800 bg-gray-900/70 rounded-2xl p-5">
+            <p className="text-sm text-gray-400">System Status</p>
+            <p className="font-semibold text-green-400">Live + Tracking</p>
           </div>
         </header>
 
-        <section className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <Metric label="Total Jobs" value={metrics.totalJobs} />
+        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <Metric label="Tracked Jobs" value={metrics.totalJobs} />
           <Metric label="Companies" value={metrics.uniqueCompanies} />
           <Metric label="Locations" value={metrics.uniqueLocations} />
           <Metric label="Remote" value={metrics.remoteJobs} />
-          <Metric label="Hybrid" value={metrics.hybridJobs} />
-          <Metric label="Onsite" value={metrics.onsiteJobs} />
+          <Metric label="Active" value={metrics.activeJobs} />
+          <Metric label="Reposted" value={metrics.repostedJobs} />
         </section>
 
-        <section className="border border-blue-900/60 bg-blue-950/20 rounded-2xl p-5 space-y-4">
+        <section className="border border-blue-900/50 bg-blue-950/20 rounded-2xl p-5 space-y-4">
           <div>
-            <h2 className="text-2xl font-bold">Quick Import a Job Link</h2>
+            <h2 className="text-2xl font-bold">Quick Import</h2>
+
             <p className="text-gray-400">
-              Paste a job URL. JobTrace will try to extract structured job data and fill the form.
+              Paste a job URL and JobTrace will attempt to extract structured hiring data.
             </p>
           </div>
 
@@ -247,10 +269,10 @@ export default function Home() {
             />
 
             <button
-              className="bg-blue-500 hover:bg-blue-400 text-white px-5 py-3 rounded-xl font-semibold"
+              className="bg-blue-500 hover:bg-blue-400 px-5 py-3 rounded-xl font-semibold"
               onClick={quickTrackUrl}
             >
-              Import Data
+              Import Job
             </button>
           </div>
         </section>
@@ -294,7 +316,7 @@ export default function Home() {
             <h2 className="text-2xl font-bold">Top Companies</h2>
 
             {topCompanies.length === 0 ? (
-              <p className="text-gray-500">No company data yet.</p>
+              <p className="text-gray-500">No tracked companies yet.</p>
             ) : (
               topCompanies.map(([name, count]) => (
                 <div
@@ -308,21 +330,22 @@ export default function Home() {
             )}
 
             <div className="pt-4">
-              <h3 className="font-semibold">Next Pipeline</h3>
-              <p className="text-sm text-gray-400 mt-1">
-                URL import → metadata extraction → location mapping → trend dashboard.
+              <h3 className="font-semibold">Tracking Pipeline</h3>
+
+              <p className="text-sm text-gray-400 mt-2">
+                Import → Extract → Track → Recheck → Detect Reposts
               </p>
             </div>
           </aside>
         </section>
 
         <section className="space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <h2 className="text-2xl font-bold">Saved Jobs</h2>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <h2 className="text-2xl font-bold">Tracked Jobs</h2>
 
             <input
-              className="bg-gray-900 border border-gray-700 p-3 rounded-xl w-full md:w-96"
-              placeholder="Search company, title, location, pay..."
+              className="bg-gray-900 border border-gray-700 p-3 rounded-xl w-full lg:w-96"
+              placeholder="Search jobs..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -332,7 +355,7 @@ export default function Home() {
             {filteredJobs.map((job) => (
               <div
                 key={job.id}
-                className="border border-gray-800 bg-gray-900/80 rounded-2xl p-5 space-y-3 hover:border-blue-800 transition"
+                className="border border-gray-800 bg-gray-900/80 rounded-2xl p-5 space-y-4 hover:border-blue-800 transition"
               >
                 <div className="flex justify-between gap-4">
                   <div>
@@ -353,9 +376,32 @@ export default function Home() {
                   {job.pay_range && <Badge>{job.pay_range}</Badge>}
                   {job.employment_type && <Badge>{job.employment_type}</Badge>}
                   {job.remote_type && <Badge>{job.remote_type}</Badge>}
+                  {job.source && <Badge>{job.source}</Badge>}
                 </div>
 
-                {job.notes && <p className="text-gray-500">{job.notes}</p>}
+                <div className="text-sm text-gray-400 space-y-1">
+                  <p>Status: {job.status || 'active'}</p>
+
+                  <p>
+                    First Seen:{' '}
+                    {job.first_seen
+                      ? new Date(job.first_seen).toLocaleDateString()
+                      : 'Unknown'}
+                  </p>
+
+                  <p>
+                    Last Checked:{' '}
+                    {job.last_seen
+                      ? new Date(job.last_seen).toLocaleDateString()
+                      : 'Unknown'}
+                  </p>
+
+                  <p>Reposts Detected: {job.repost_count || 0}</p>
+                </div>
+
+                {job.notes && (
+                  <p className="text-gray-500 text-sm">{job.notes}</p>
+                )}
 
                 {job.url && (
                   <a
@@ -375,10 +421,17 @@ export default function Home() {
   )
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({
+  label,
+  value,
+}: {
+  label: string
+  value: number
+}) {
   return (
     <div className="border border-gray-800 bg-gray-900/80 rounded-2xl p-4">
       <p className="text-sm text-gray-400">{label}</p>
+
       <p className="text-3xl font-black">{value}</p>
     </div>
   )
@@ -403,7 +456,11 @@ function Input({
   )
 }
 
-function Badge({ children }: { children: React.ReactNode }) {
+function Badge({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
     <span className="border border-gray-700 bg-gray-950 rounded-full px-3 py-1 text-gray-300">
       {children}
