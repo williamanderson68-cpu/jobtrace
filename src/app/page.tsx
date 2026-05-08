@@ -59,24 +59,37 @@ export default function Home() {
   async function quickTrackUrl() {
     if (!quickUrl) return
 
-    const { error } = await supabase.from('jobs').insert({
-      company: 'Unknown Company',
-      title: 'Job link imported',
-      location: 'Unknown Location',
-      pay_range: '',
-      url: quickUrl,
-      employment_type: '',
-      remote_type: '',
-      notes: 'Imported from quick URL tracker. Auto-extraction coming later.',
-    })
+    try {
+      const response = await fetch('/api/import-job', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url: quickUrl }),
+      })
 
-    if (error) {
-      alert(error.message)
-      return
+      const data = await response.json()
+
+      if (!data.success) {
+        alert(data.message || 'Import failed')
+        return
+      }
+
+      setCompany(data.company || '')
+      setTitle(data.title || '')
+      setLocation(data.location || '')
+      setEmploymentType(data.employment_type || '')
+      setPay(data.pay_range || '')
+      setRemoteType('')
+      setNotes('Imported from structured job posting data')
+      setUrl(quickUrl)
+
+      setQuickUrl('')
+
+      alert('Job data imported! Review it, then click Save Job.')
+    } catch {
+      alert('Failed to import job')
     }
-
-    setQuickUrl('')
-    await loadJobs()
   }
 
   function clearForm() {
@@ -103,16 +116,25 @@ export default function Home() {
     }
   }
 
+ 
   async function deleteJob(id: number) {
-    const { error } = await supabase.from('jobs').delete().eq('id', id)
+  const confirmed = confirm('Delete this job?')
 
-    if (error) {
-      alert(error.message)
-      return
-    }
+  if (!confirmed) return
 
-    await loadJobs()
+  const { error } = await supabase
+    .from('jobs')
+    .delete()
+    .eq('id', id)
+
+  if (error) {
+    console.error(error)
+    alert(error.message)
+    return
   }
+
+  setJobs((prev) => prev.filter((job) => job.id !== id))
+}
 
   useEffect(() => {
     loadJobs()
@@ -210,9 +232,9 @@ export default function Home() {
 
         <section className="border border-blue-900/60 bg-blue-950/20 rounded-2xl p-5 space-y-4">
           <div>
-            <h2 className="text-2xl font-bold">Quick Track a Job Link</h2>
+            <h2 className="text-2xl font-bold">Quick Import a Job Link</h2>
             <p className="text-gray-400">
-              Paste a job URL now. Later this becomes the auto-extraction/scraping pipeline.
+              Paste a job URL. JobTrace will try to extract structured job data and fill the form.
             </p>
           </div>
 
@@ -228,7 +250,7 @@ export default function Home() {
               className="bg-blue-500 hover:bg-blue-400 text-white px-5 py-3 rounded-xl font-semibold"
               onClick={quickTrackUrl}
             >
-              Track Link
+              Import Data
             </button>
           </div>
         </section>
@@ -275,7 +297,10 @@ export default function Home() {
               <p className="text-gray-500">No company data yet.</p>
             ) : (
               topCompanies.map(([name, count]) => (
-                <div key={name} className="flex justify-between border-b border-gray-800 pb-2">
+                <div
+                  key={name}
+                  className="flex justify-between border-b border-gray-800 pb-2"
+                >
                   <span>{name}</span>
                   <span className="text-blue-300">{count}</span>
                 </div>
