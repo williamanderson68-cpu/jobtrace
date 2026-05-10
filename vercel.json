@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/recheck-jobs",
-      "schedule": "0 6 * * *"
+      "path": "/api/import",
+      "schedule": "0 8 * * *"
     }
   ]
 }
