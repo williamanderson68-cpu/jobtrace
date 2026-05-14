@@ -1,16 +1,19 @@
-import { Suspense } from "react";
-import DashboardClient from "./DashboardClient";
+import DashboardClient from './DashboardClient'
 
-export default function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    title?: string
+    location?: string
+  }>
+}) {
+  const params = await searchParams
+
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-slate-950 p-8 text-white">
-          Loading dashboard...
-        </div>
-      }
-    >
-      <DashboardClient />
-    </Suspense>
-  );
+    <DashboardClient
+      title={params.title || ''}
+      location={params.location || ''}
+    />
+  )
 }
