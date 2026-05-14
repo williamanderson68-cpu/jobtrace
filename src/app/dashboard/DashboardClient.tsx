@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { projectToNorCalMap } from '@/lib/geo'
@@ -10,11 +11,13 @@ interface Job {
   company: string
   location: string
   salary?: string | null
+  pay_range?: string | null
   created_at: string
   first_seen?: string | null
   last_seen?: string | null
   status?: string | null
   source?: string | null
+  url?: string | null
   latitude?: number | null
   longitude?: number | null
 }
@@ -113,7 +116,6 @@ export default function DashboardClient({
   }, [jobs])
 
   const metrics = useMemo(() => {
-    const salaryEvents = events.filter((event) => event.event_type === 'salary_changed')
     const repostEvents = events.filter((event) => event.event_type === 'reposted')
     const createdEvents = events.filter((event) => event.event_type === 'created')
 
@@ -122,7 +124,6 @@ export default function DashboardClient({
       mappedOpenings: mapPoints.length,
       eventCount: events.length,
       hiringVelocity: createdEvents.length,
-      salaryChanges: salaryEvents.length,
       repostRate:
         jobs.length > 0 ? Math.round((repostEvents.length / jobs.length) * 100) : 0,
       ghostRisk:
@@ -151,13 +152,22 @@ export default function DashboardClient({
             </p>
           </div>
 
-          <div className="text-right">
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-500">
-              Real Data Mode
-            </p>
-            <p className="text-zinc-400 text-sm">
-              Demo data hidden
-            </p>
+          <div className="flex items-center gap-6">
+            <Link
+              href="/companies"
+              className="text-sm text-zinc-400 hover:text-cyan-400 transition"
+            >
+              Employer Directory
+            </Link>
+
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-[0.2em] text-cyan-500">
+                Real Data Mode
+              </p>
+              <p className="text-zinc-400 text-sm">
+                Click records for details
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -240,49 +250,30 @@ export default function DashboardClient({
                 />
               </svg>
 
-              <div className="absolute left-[20%] top-[78%] text-[10px] uppercase tracking-[0.18em] text-zinc-600">
-                Bay Area
-              </div>
-              <div className="absolute left-[60%] top-[58%] text-[10px] uppercase tracking-[0.18em] text-zinc-600">
-                Sacramento
-              </div>
-              <div className="absolute left-[44%] top-[40%] text-[10px] uppercase tracking-[0.18em] text-zinc-600">
-                North Valley
-              </div>
+              {mapPoints.map((job, index) => (
+                <Link
+                  href={`/jobs/${job.id}`}
+                  key={`${job.id}-${index}`}
+                  className="absolute group"
+                  style={{
+                    left: `${job.x}%`,
+                    top: `${job.y}%`,
+                  }}
+                >
+                  <div className="absolute -left-4 -top-4 h-8 w-8 rounded-full bg-cyan-400/10 animate-ping" />
+                  <div className="relative h-3.5 w-3.5 bg-cyan-400 rounded-full shadow-[0_0_18px_rgba(34,211,238,0.95)]" />
 
-              {mapPoints.length === 0 && !loading ? (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center">
-                    <p className="text-zinc-300 font-medium">
-                      No mapped job coordinates yet
-                    </p>
-                    <p className="text-zinc-600 text-sm mt-2">
-                      Run the automated importer again after this upgrade.
+                  <div className="hidden group-hover:block absolute left-5 top-0 bg-black border border-zinc-800 rounded-lg p-3 w-64 z-20 shadow-2xl">
+                    <p className="font-medium text-sm">{job.company}</p>
+                    <p className="text-zinc-300 text-xs mt-1">{job.title}</p>
+                    <p className="text-zinc-500 text-xs mt-1">{job.location}</p>
+                    <p className="text-cyan-400 text-xs mt-2">{job.salary || job.pay_range || 'Salary not listed'}</p>
+                    <p className="text-zinc-600 text-[10px] uppercase tracking-[0.15em] mt-2">
+                      Click for intelligence file
                     </p>
                   </div>
-                </div>
-              ) : (
-                mapPoints.map((job, index) => (
-                  <div
-                    key={`${job.id}-${index}`}
-                    className="absolute group"
-                    style={{
-                      left: `${job.x}%`,
-                      top: `${job.y}%`,
-                    }}
-                  >
-                    <div className="absolute -left-4 -top-4 h-8 w-8 rounded-full bg-cyan-400/10 animate-ping" />
-                    <div className="relative h-3.5 w-3.5 bg-cyan-400 rounded-full shadow-[0_0_18px_rgba(34,211,238,0.95)]" />
-
-                    <div className="hidden group-hover:block absolute left-5 top-0 bg-black border border-zinc-800 rounded-lg p-3 w-64 z-20 shadow-2xl">
-                      <p className="font-medium text-sm">{job.company}</p>
-                      <p className="text-zinc-300 text-xs mt-1">{job.title}</p>
-                      <p className="text-zinc-500 text-xs mt-1">{job.location}</p>
-                      <p className="text-cyan-400 text-xs mt-2">{job.salary || 'Salary not listed'}</p>
-                    </div>
-                  </div>
-                ))
-              )}
+                </Link>
+              ))}
 
               <div className="absolute bottom-6 left-6 bg-black/85 border border-zinc-800 rounded-xl px-4 py-3">
                 <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-1">
@@ -313,9 +304,10 @@ export default function DashboardClient({
                 </p>
               ) : (
                 events.map((event) => (
-                  <div
+                  <Link
+                    href={`/jobs/${event.job_id}`}
                     key={event.id}
-                    className="border border-zinc-800 rounded-xl p-4 bg-black"
+                    className="block border border-zinc-800 rounded-xl p-4 bg-black hover:border-cyan-900 transition"
                   >
                     <div className="flex items-start gap-3">
                       <div
@@ -334,7 +326,7 @@ export default function DashboardClient({
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 ))
               )}
             </div>
@@ -358,9 +350,10 @@ export default function DashboardClient({
                 </p>
               ) : (
                 companies.map((company) => (
-                  <div
+                  <Link
+                    href={`/companies/${encodeURIComponent(company.name)}`}
                     key={company.id}
-                    className="flex items-center justify-between border-b border-zinc-900 pb-4"
+                    className="flex items-center justify-between border-b border-zinc-900 pb-4 hover:border-cyan-900 transition"
                   >
                     <div>
                       <p className="font-medium">{company.name}</p>
@@ -375,7 +368,7 @@ export default function DashboardClient({
                       </p>
                       <p className="text-zinc-500 text-xs">expansion score</p>
                     </div>
-                  </div>
+                  </Link>
                 ))
               )}
             </div>
@@ -383,29 +376,29 @@ export default function DashboardClient({
 
           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6">
             <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-2">
-              Data Integrity
+              Product Navigation
             </p>
 
             <h3 className="text-2xl font-semibold mb-6">
-              Source Status
+              Intelligence Files
             </h3>
 
             <div className="space-y-5 text-sm">
               <div className="border-l-2 border-cyan-500 pl-4">
                 <p className="text-zinc-300">
-                  Dashboard is now filtering out manual/demo source records.
+                  Click any job record to view its posting file, source URL, event timeline, and tracked changes.
                 </p>
               </div>
 
               <div className="border-l-2 border-green-500 pl-4">
                 <p className="text-zinc-300">
-                  Map points are generated from stored latitude/longitude data.
+                  Click any employer to view company-level hiring velocity, openings, events, and expansion signals.
                 </p>
               </div>
 
               <div className="border-l-2 border-amber-500 pl-4">
                 <p className="text-zinc-300">
-                  If a job cannot be geocoded, it stays in the dataset but does not appear on the map.
+                  The dashboard is now the overview layer. Jobs and employers have their own intelligence pages.
                 </p>
               </div>
             </div>
@@ -425,7 +418,7 @@ export default function DashboardClient({
             </div>
 
             <p className="text-zinc-500 text-sm">
-              Manual/demo records hidden
+              Click a row to open the intelligence file
             </p>
           </div>
 
@@ -438,7 +431,8 @@ export default function DashboardClient({
               </p>
             ) : (
               jobs.map((job) => (
-                <div
+                <Link
+                  href={`/jobs/${job.id}`}
                   key={job.id}
                   className="grid md:grid-cols-6 gap-4 items-center border border-zinc-900 rounded-xl p-4 bg-black hover:border-cyan-900 transition"
                 >
@@ -453,7 +447,7 @@ export default function DashboardClient({
 
                   <div>
                     <p className="text-cyan-400 text-sm">
-                      {job.salary || 'Not Listed'}
+                      {job.salary || job.pay_range || 'Not Listed'}
                     </p>
                   </div>
 
@@ -475,7 +469,7 @@ export default function DashboardClient({
                       ).toLocaleDateString()}
                     </p>
                   </div>
-                </div>
+                </Link>
               ))
             )}
           </div>
