@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { projectToNorCalMap } from '@/lib/geo'
 
 interface Job {
   id: number
@@ -13,6 +14,9 @@ interface Job {
   first_seen?: string | null
   last_seen?: string | null
   status?: string | null
+  source?: string | null
+  latitude?: number | null
+  longitude?: number | null
 }
 
 interface JobEvent {
@@ -58,6 +62,8 @@ export default function DashboardClient({
     let jobsQuery = supabase
       .from('jobs')
       .select('*')
+      .neq('source', 'manual')
+      .not('source', 'is', null)
       .order('last_seen', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
 
@@ -71,15 +77,16 @@ export default function DashboardClient({
 
     const [{ data: jobsData }, { data: eventData }, { data: companyData }] =
       await Promise.all([
-        jobsQuery.limit(50),
+        jobsQuery.limit(100),
         supabase
           .from('job_events')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(25),
+          .limit(35),
         supabase
           .from('companies')
           .select('*')
+          .not('name', 'ilike', '%tesla%')
           .order('expansion_score', { ascending: false })
           .limit(10),
       ])
@@ -90,6 +97,21 @@ export default function DashboardClient({
     setLoading(false)
   }
 
+  const mapPoints = useMemo(() => {
+    return jobs
+      .map((job) => {
+        const projected = projectToNorCalMap(job.latitude, job.longitude)
+        if (!projected) return null
+
+        return {
+          ...job,
+          x: projected.x,
+          y: projected.y,
+        }
+      })
+      .filter(Boolean) as Array<Job & { x: number; y: number }>
+  }, [jobs])
+
   const metrics = useMemo(() => {
     const salaryEvents = events.filter((event) => event.event_type === 'salary_changed')
     const repostEvents = events.filter((event) => event.event_type === 'reposted')
@@ -97,6 +119,7 @@ export default function DashboardClient({
 
     return {
       activeOpenings: jobs.length,
+      mappedOpenings: mapPoints.length,
       eventCount: events.length,
       hiringVelocity: createdEvents.length,
       salaryChanges: salaryEvents.length,
@@ -105,7 +128,7 @@ export default function DashboardClient({
       ghostRisk:
         repostEvents.length >= 5 ? 'Elevated' : repostEvents.length >= 2 ? 'Moderate' : 'Low',
     }
-  }, [jobs, events])
+  }, [jobs, events, mapPoints.length])
 
   const eventColor = (eventType: string) => {
     if (eventType === 'created') return 'bg-cyan-400'
@@ -124,16 +147,16 @@ export default function DashboardClient({
               JobTrace Intelligence
             </h1>
             <p className="text-zinc-500 text-sm mt-1">
-              Labor Market Surveillance Platform
+              Live Labor Market Surveillance
             </p>
           </div>
 
           <div className="text-right">
             <p className="text-xs uppercase tracking-[0.2em] text-cyan-500">
-              Event Engine Online
+              Real Data Mode
             </p>
             <p className="text-zinc-400 text-sm">
-              {events.length} recent signals
+              Demo data hidden
             </p>
           </div>
         </div>
@@ -150,15 +173,15 @@ export default function DashboardClient({
           </h2>
 
           <p className="text-zinc-400 text-xl">
-            {location || 'Live company, job, and event intelligence'}
+            {location || 'Imported Greenhouse / Lever source data only'}
           </p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
           {[
             ['Active Openings', metrics.activeOpenings, 'text-cyan-400'],
-            ['New Signals', metrics.eventCount, 'text-green-400'],
-            ['Hiring Velocity', `+${metrics.hiringVelocity}`, 'text-cyan-400'],
+            ['Mapped Openings', metrics.mappedOpenings, 'text-green-400'],
+            ['New Signals', metrics.eventCount, 'text-cyan-400'],
             ['Repost Rate', `${metrics.repostRate}%`, 'text-amber-400'],
             ['Ghost Job Risk', metrics.ghostRisk, 'text-red-400'],
           ].map(([label, value, color]) => (
@@ -175,56 +198,104 @@ export default function DashboardClient({
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6 mb-10">
-          <div className="lg:col-span-2 bg-zinc-950 border border-zinc-900 rounded-2xl p-6 h-[500px]">
+          <div className="lg:col-span-2 bg-zinc-950 border border-zinc-900 rounded-2xl p-6 h-[560px]">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-2">
                   Geographic Intelligence
                 </p>
                 <h3 className="text-2xl font-semibold">
-                  Hiring Signal Map
+                  Northern California Hiring Signal Map
                 </h3>
               </div>
 
               <div className="flex gap-2 items-center">
                 <div className="h-3 w-3 rounded-full bg-cyan-400 animate-pulse" />
-                <span className="text-zinc-500 text-sm">Tracking</span>
+                <span className="text-zinc-500 text-sm">
+                  {mapPoints.length} mapped signals
+                </span>
               </div>
             </div>
 
-            <div className="h-full rounded-2xl border border-zinc-800 bg-black relative overflow-hidden">
+            <div className="h-[460px] rounded-2xl border border-zinc-800 bg-black relative overflow-hidden">
               <div className="absolute inset-0 bg-[linear-gradient(rgba(39,39,42,0.35)_1px,transparent_1px),linear-gradient(90deg,rgba(39,39,42,0.35)_1px,transparent_1px)] bg-[size:42px_42px]" />
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.11),transparent_60%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.11),transparent_62%)]" />
 
-              {jobs.slice(0, 12).map((job, index) => (
-                <div
-                  key={job.id}
-                  className="absolute group"
-                  style={{
-                    top: `${22 + ((index * 17) % 58)}%`,
-                    left: `${18 + ((index * 23) % 64)}%`,
-                  }}
-                >
-                  <div className="h-4 w-4 bg-cyan-400 rounded-full blur-[1px] animate-pulse" />
-                  <div className="hidden group-hover:block absolute left-5 top-0 bg-black border border-zinc-800 rounded-lg p-3 w-56 z-20">
-                    <p className="font-medium text-sm">{job.company}</p>
-                    <p className="text-zinc-500 text-xs">{job.location}</p>
+              <svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                className="absolute inset-0 h-full w-full opacity-50"
+              >
+                <path
+                  d="M19 5 L38 8 L52 18 L64 35 L72 55 L66 74 L55 93 L37 88 L27 72 L20 50 L14 31 Z"
+                  fill="rgba(24,24,27,0.75)"
+                  stroke="rgba(34,211,238,0.45)"
+                  strokeWidth="0.5"
+                />
+                <path
+                  d="M23 47 C31 43, 38 44, 45 49 C54 55, 62 54, 69 51"
+                  fill="none"
+                  stroke="rgba(34,211,238,0.25)"
+                  strokeWidth="0.35"
+                />
+              </svg>
+
+              <div className="absolute left-[20%] top-[78%] text-[10px] uppercase tracking-[0.18em] text-zinc-600">
+                Bay Area
+              </div>
+              <div className="absolute left-[60%] top-[58%] text-[10px] uppercase tracking-[0.18em] text-zinc-600">
+                Sacramento
+              </div>
+              <div className="absolute left-[44%] top-[40%] text-[10px] uppercase tracking-[0.18em] text-zinc-600">
+                North Valley
+              </div>
+
+              {mapPoints.length === 0 && !loading ? (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-zinc-300 font-medium">
+                      No mapped job coordinates yet
+                    </p>
+                    <p className="text-zinc-600 text-sm mt-2">
+                      Run the automated importer again after this upgrade.
+                    </p>
                   </div>
                 </div>
-              ))}
+              ) : (
+                mapPoints.map((job, index) => (
+                  <div
+                    key={`${job.id}-${index}`}
+                    className="absolute group"
+                    style={{
+                      left: `${job.x}%`,
+                      top: `${job.y}%`,
+                    }}
+                  >
+                    <div className="absolute -left-4 -top-4 h-8 w-8 rounded-full bg-cyan-400/10 animate-ping" />
+                    <div className="relative h-3.5 w-3.5 bg-cyan-400 rounded-full shadow-[0_0_18px_rgba(34,211,238,0.95)]" />
 
-              <div className="absolute bottom-6 left-6 bg-black/80 border border-zinc-800 rounded-xl px-4 py-3">
+                    <div className="hidden group-hover:block absolute left-5 top-0 bg-black border border-zinc-800 rounded-lg p-3 w-64 z-20 shadow-2xl">
+                      <p className="font-medium text-sm">{job.company}</p>
+                      <p className="text-zinc-300 text-xs mt-1">{job.title}</p>
+                      <p className="text-zinc-500 text-xs mt-1">{job.location}</p>
+                      <p className="text-cyan-400 text-xs mt-2">{job.salary || 'Salary not listed'}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+
+              <div className="absolute bottom-6 left-6 bg-black/85 border border-zinc-800 rounded-xl px-4 py-3">
                 <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-1">
-                  Signal Density
+                  Signal Source
                 </p>
                 <p className="text-cyan-400 font-semibold">
-                  {jobs.length || 0} tracked openings
+                  Live imported jobs only
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 h-[500px] overflow-hidden">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 h-[560px] overflow-hidden">
             <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-2">
               Event Stream
             </p>
@@ -233,12 +304,12 @@ export default function DashboardClient({
               Market Activity
             </h3>
 
-            <div className="space-y-4 overflow-y-auto pr-2 h-[400px]">
+            <div className="space-y-4 overflow-y-auto pr-2 h-[455px]">
               {loading ? (
                 <p className="text-zinc-500">Loading events...</p>
               ) : events.length === 0 ? (
                 <p className="text-zinc-500">
-                  No events yet. Import jobs to generate market activity.
+                  No events yet. Run the automated importer to generate activity.
                 </p>
               ) : (
                 events.map((event) => (
@@ -312,31 +383,29 @@ export default function DashboardClient({
 
           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6">
             <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-2">
-              Intelligence Interpretation
+              Data Integrity
             </p>
 
             <h3 className="text-2xl font-semibold mb-6">
-              What Changed?
+              Source Status
             </h3>
 
             <div className="space-y-5 text-sm">
               <div className="border-l-2 border-cyan-500 pl-4">
                 <p className="text-zinc-300">
-                  New job creation events indicate current employer demand.
-                </p>
-              </div>
-
-              <div className="border-l-2 border-amber-500 pl-4">
-                <p className="text-zinc-300">
-                  Repost events can suggest roles that are hard to fill,
-                  evergreen listings, or labor-market signaling.
+                  Dashboard is now filtering out manual/demo source records.
                 </p>
               </div>
 
               <div className="border-l-2 border-green-500 pl-4">
                 <p className="text-zinc-300">
-                  Salary change events create the foundation for compensation
-                  pressure tracking.
+                  Map points are generated from stored latitude/longitude data.
+                </p>
+              </div>
+
+              <div className="border-l-2 border-amber-500 pl-4">
+                <p className="text-zinc-300">
+                  If a job cannot be geocoded, it stays in the dataset but does not appear on the map.
                 </p>
               </div>
             </div>
@@ -347,16 +416,16 @@ export default function DashboardClient({
           <div className="flex items-center justify-between mb-8">
             <div>
               <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-2">
-                Raw Dataset
+                Source Dataset
               </p>
 
               <h3 className="text-2xl font-semibold">
-                Supporting Job Records
+                Imported Job Records
               </h3>
             </div>
 
             <p className="text-zinc-500 text-sm">
-              Evidence behind the intelligence layer
+              Manual/demo records hidden
             </p>
           </div>
 
@@ -365,13 +434,13 @@ export default function DashboardClient({
               <p className="text-zinc-500">Loading labor market data...</p>
             ) : jobs.length === 0 ? (
               <p className="text-zinc-500">
-                No records found. Import jobs to create the first signals.
+                No imported records found. Run the automated importer.
               </p>
             ) : (
               jobs.map((job) => (
                 <div
                   key={job.id}
-                  className="grid md:grid-cols-5 gap-4 items-center border border-zinc-900 rounded-xl p-4 bg-black hover:border-cyan-900 transition"
+                  className="grid md:grid-cols-6 gap-4 items-center border border-zinc-900 rounded-xl p-4 bg-black hover:border-cyan-900 transition"
                 >
                   <div className="md:col-span-2">
                     <p className="font-medium">{job.title}</p>
@@ -386,6 +455,13 @@ export default function DashboardClient({
                     <p className="text-cyan-400 text-sm">
                       {job.salary || 'Not Listed'}
                     </p>
+                  </div>
+
+                  <div>
+                    <p className="text-zinc-500 text-xs uppercase tracking-[0.15em]">
+                      Source
+                    </p>
+                    <p className="text-sm">{job.source || 'unknown'}</p>
                   </div>
 
                   <div className="text-right">

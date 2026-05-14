@@ -1,4 +1,5 @@
 import { importJobWithEvents, type JobPayload } from '@/lib/jobEventEngine'
+import { inferCoordinates } from '@/lib/geo'
 import { jobSources, type JobSource } from '@/lib/jobSources'
 
 type ImportResult = {
@@ -8,6 +9,16 @@ type ImportResult = {
   failed: number
   events: string[]
   errors: string[]
+}
+
+function withCoordinates(job: JobPayload): JobPayload {
+  const coordinates = inferCoordinates(job.location)
+
+  return {
+    ...job,
+    latitude: job.latitude ?? coordinates?.latitude ?? null,
+    longitude: job.longitude ?? coordinates?.longitude ?? null,
+  }
 }
 
 function getSalaryFromGreenhouseJob(job: any) {
@@ -34,14 +45,14 @@ function normalizeGreenhouseJob(job: any, sourceName: string): JobPayload | null
     return null
   }
 
-  return {
+  return withCoordinates({
     title: String(job.title),
     company: sourceName,
     location: String(job.location?.name || 'Location not listed'),
     salary: getSalaryFromGreenhouseJob(job),
     url: String(job.absolute_url),
     source: 'greenhouse',
-  }
+  })
 }
 
 function getSalaryFromLeverPosting(posting: any) {
@@ -63,14 +74,14 @@ function normalizeLeverPosting(posting: any, sourceName: string): JobPayload | n
     return null
   }
 
-  return {
+  return withCoordinates({
     title: String(posting.text),
     company: sourceName,
     location: String(posting.categories?.location || 'Location not listed'),
     salary: getSalaryFromLeverPosting(posting),
     url: String(posting.hostedUrl),
     source: 'lever',
-  }
+  })
 }
 
 async function fetchGreenhouseJobs(source: Extract<JobSource, { type: 'greenhouse' }>) {
