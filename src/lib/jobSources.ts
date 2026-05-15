@@ -24,4 +24,7 @@ export const jobSources: JobSource[] = [
   { name: 'GitLab', type: 'greenhouse', boardToken: 'gitlab', enabled: true },
   { name: 'Reddit', type: 'greenhouse', boardToken: 'reddit', enabled: true },
   { name: 'Anduril', type: 'lever', companySlug: 'anduril', enabled: false },
+  { name: 'OpenAI', type: 'greenhouse', boardToken: 'openai', enabled: true },
+
 ]
+

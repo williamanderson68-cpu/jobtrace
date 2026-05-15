@@ -1,2 +1,11 @@
 @import 'mapbox-gl/dist/mapbox-gl.css';
 @import "tailwindcss";
+/* Optional style notes only. Tailwind classes are preferred in the app. */
+
+:root {
+  --jobtrace-bg: #090909;
+  --jobtrace-card: rgba(9, 9, 11, 0.7);
+  --jobtrace-border: rgb(39, 39, 42);
+  --jobtrace-text: rgb(244, 244, 245);
+  --jobtrace-muted: rgb(113, 113, 122);
+}
