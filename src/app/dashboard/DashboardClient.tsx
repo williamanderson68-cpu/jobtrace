@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import JobSignalMap from '@/components/JobSignalMap'
+import CollapsibleText from '@/components/CollapsibleText'
 
 type Job = {
   id: number
@@ -19,6 +20,9 @@ type Job = {
   source?: string | null
   latitude?: number | null
   longitude?: number | null
+  description?: string | null
+  requirements?: string | null
+  benefits?: string | null
 }
 
 type JobEvent = {
@@ -29,29 +33,37 @@ type JobEvent = {
   created_at: string
 }
 
-function displayStatus(job: Job) {
-  const status = (job.lifecycle_status || job.status || 'active').toLowerCase()
-  if (status === 'removed') return 'Removed'
-  if (status === 'expired') return 'Expired'
-  if (status === 'inactive') return 'Inactive'
-  return 'Active'
+type Company = {
+  id: string
+  name: string
+  total_openings: number
+  expansion_score: number
 }
 
-function displayPay(job: Job) {
-  return job.salary || job.pay_range || 'Pay unavailable'
+const INITIAL_VISIBLE_JOBS = 25
+const JOB_INCREMENT = 25
+
+function formatStatus(job: Job) {
+  const value = job.lifecycle_status || job.status || 'active'
+  return value.replace(/_/g, ' ')
+}
+
+function formatPay(job: Job) {
+  return job.salary || job.pay_range || 'Not available'
 }
 
 export default function DashboardClient({ title, location }: { title: string; location: string }) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [events, setEvents] = useState<JobEvent[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
   const [companyFilter, setCompanyFilter] = useState('All Companies')
   const [sourceFilter, setSourceFilter] = useState('All Sources')
   const [lifecycleFilter, setLifecycleFilter] = useState('active')
+  const [visibleJobCount, setVisibleJobCount] = useState(INITIAL_VISIBLE_JOBS)
 
   useEffect(() => {
     fetchIntelligence()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, location])
 
   async function fetchIntelligence() {
@@ -68,13 +80,16 @@ export default function DashboardClient({ title, location }: { title: string; lo
     if (title) jobsQuery = jobsQuery.ilike('title', `%${title}%`)
     if (location) jobsQuery = jobsQuery.ilike('location', `%${location}%`)
 
-    const [{ data: jobsData }, { data: eventData }] = await Promise.all([
+    const [{ data: jobsData }, { data: eventData }, { data: companyData }] = await Promise.all([
       jobsQuery.limit(300),
       supabase.from('job_events').select('*').order('created_at', { ascending: false }).limit(50),
+      supabase.from('companies').select('*').not('name', 'ilike', '%tesla%').order('expansion_score', { ascending: false }).limit(20),
     ])
 
     setJobs(jobsData || [])
     setEvents(eventData || [])
+    setCompanies(companyData || [])
+    setVisibleJobCount(INITIAL_VISIBLE_JOBS)
     setLoading(false)
   }
 
@@ -88,35 +103,32 @@ export default function DashboardClient({ title, location }: { title: string; lo
     [jobs]
   )
 
-  const filteredJobs = useMemo(
-    () => jobs.filter((job) => {
-      const status = (job.lifecycle_status || job.status || 'active').toLowerCase()
+  const filteredJobs = useMemo(() => jobs.filter((job) => {
+    const status = job.lifecycle_status || job.status || 'active'
 
-      return (
-        (companyFilter === 'All Companies' || job.company === companyFilter) &&
-        (sourceFilter === 'All Sources' || (job.source || 'unknown') === sourceFilter) &&
-        (lifecycleFilter === 'all' ||
-          (lifecycleFilter === 'active' && status !== 'removed') ||
-          (lifecycleFilter === 'removed' && status === 'removed'))
-      )
-    }),
-    [jobs, companyFilter, sourceFilter, lifecycleFilter]
+    return (companyFilter === 'All Companies' || job.company === companyFilter)
+      && (sourceFilter === 'All Sources' || (job.source || 'unknown') === sourceFilter)
+      && (lifecycleFilter === 'all' || (lifecycleFilter === 'active' && status !== 'removed') || (lifecycleFilter === 'removed' && status === 'removed'))
+  }), [jobs, companyFilter, sourceFilter, lifecycleFilter])
+
+  const visibleJobs = useMemo(
+    () => filteredJobs.slice(0, visibleJobCount),
+    [filteredJobs, visibleJobCount]
   )
 
   const metrics = useMemo(() => {
     const createdEvents = events.filter((event) => event.event_type === 'created')
     const removedEvents = events.filter((event) => event.event_type === 'removed')
-    const companiesHiring = new Set(filteredJobs.map((job) => job.company).filter(Boolean)).size
-    const citiesCovered = new Set(filteredJobs.map((job) => job.location).filter(Boolean)).size
+    const uniqueCompanies = new Set(filteredJobs.map((job) => job.company).filter(Boolean))
+    const uniqueCities = new Set(filteredJobs.map((job) => job.location).filter(Boolean))
 
     return {
       activeOpenings: filteredJobs.length,
+      companiesHiring: uniqueCompanies.size,
       mappedOpenings: filteredJobs.filter((job) => job.latitude && job.longitude).length,
-      companiesHiring,
-      citiesCovered,
-      recentlyUpdated: events.length,
-      newThisWeek: createdEvents.length,
+      hiringVelocity: createdEvents.length,
       removed: removedEvents.length,
+      citiesCovered: uniqueCities.size,
     }
   }, [filteredJobs, events])
 
@@ -129,178 +141,158 @@ export default function DashboardClient({ title, location }: { title: string; lo
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#070707] text-zinc-100">
-      <div className="sticky top-0 z-50 border-b border-zinc-900 bg-black/80 backdrop-blur">
+    <main className="min-h-screen bg-[#090909] text-zinc-100 overflow-hidden">
+      <div className="sticky top-0 z-50 border-b border-zinc-800 bg-black/80 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link href="/" className="flex items-center gap-3">
-            <div className="h-3 w-3 rounded-full bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.8)]" />
+            <div className="h-3 w-3 rounded-full bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.7)]" />
             <div>
-              <div className="text-xl font-semibold tracking-tight text-white">JobTrace</div>
-              <div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Labor Market Intelligence</div>
+              <h1 className="text-2xl font-semibold tracking-tight text-white">JobTrace</h1>
+              <p className="text-xs uppercase tracking-[0.24em] text-zinc-500">Labor Market Intelligence</p>
             </div>
           </Link>
 
-          <div className="flex items-center gap-6">
-            <Link href="/" className="text-sm text-zinc-400 transition hover:text-white">
-              Search
-            </Link>
-            <button onClick={fetchIntelligence} className="text-sm text-cyan-400 transition hover:text-cyan-300">
-              Refresh
-            </button>
-          </div>
+          <nav className="flex items-center gap-6 text-sm text-zinc-400">
+            <Link href="/dashboard" className="hover:text-white transition">Dashboard</Link>
+            <Link href="/companies" className="hover:text-white transition">Employers</Link>
+          </nav>
         </div>
       </div>
 
       <div className="mx-auto max-w-7xl px-6 py-8">
         <div className="mb-10">
-          <p className="mb-3 text-xs uppercase tracking-[0.28em] text-cyan-400/80">Intelligence Query</p>
-          <h1 className="mb-2 text-4xl font-semibold tracking-tight text-white md:text-5xl">
-            {title || 'Northern California Labor Market'}
-          </h1>
-          <p className="text-lg text-zinc-400 md:text-xl">
-            {location || 'Labor Market Intelligence, not ads.'}
-          </p>
+          <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">Intelligence Query</p>
+          <h2 className="mb-2 text-5xl font-bold tracking-tight text-white">{title || 'Northern California Labor Market'}</h2>
+          <p className="text-xl text-zinc-400">{location || 'Labor Market Intelligence, not ads.'}</p>
         </div>
 
-        <div className="mb-8 grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5 backdrop-blur md:grid-cols-4">
-          <select
-            value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
-            className="rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-zinc-100 outline-none focus:border-cyan-500"
-          >
-            {companyOptions.map((option) => (
-              <option key={option}>{option}</option>
-            ))}
+        <div className="mb-8 grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5 md:grid-cols-4">
+          <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)} className="rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-zinc-100">
+            {companyOptions.map((option) => <option key={option}>{option}</option>)}
           </select>
 
-          <select
-            value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value)}
-            className="rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-zinc-100 outline-none focus:border-cyan-500"
-          >
-            {sourceOptions.map((option) => (
-              <option key={option}>{option}</option>
-            ))}
+          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-zinc-100">
+            {sourceOptions.map((option) => <option key={option}>{option}</option>)}
           </select>
 
-          <select
-            value={lifecycleFilter}
-            onChange={(e) => setLifecycleFilter(e.target.value)}
-            className="rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-zinc-100 outline-none focus:border-cyan-500"
-          >
+          <select value={lifecycleFilter} onChange={(e) => setLifecycleFilter(e.target.value)} className="rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-zinc-100">
             <option value="active">Active Only</option>
             <option value="removed">Removed Only</option>
             <option value="all">All Statuses</option>
           </select>
 
-          <button
-            onClick={fetchIntelligence}
-            className="rounded-xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-black transition hover:bg-cyan-300"
-          >
+          <button onClick={fetchIntelligence} className="rounded-xl bg-cyan-400 px-4 py-3 font-semibold text-black hover:bg-cyan-300">
             Refresh Data
           </button>
         </div>
 
         <div className="mb-10 grid grid-cols-2 gap-4 md:grid-cols-6">
           {[
-            ['Jobs Tracked', metrics.activeOpenings, 'text-cyan-400'],
-            ['Mapped', metrics.mappedOpenings, 'text-green-400'],
+            ['Jobs Tracked', metrics.activeOpenings, 'text-cyan-300'],
             ['Companies Hiring', metrics.companiesHiring, 'text-zinc-100'],
+            ['Mapped', metrics.mappedOpenings, 'text-green-300'],
+            ['New', `+${metrics.hiringVelocity}`, 'text-green-300'],
+            ['Removed', metrics.removed, 'text-red-300'],
             ['Cities Covered', metrics.citiesCovered, 'text-zinc-100'],
-            ['Recently Updated', metrics.recentlyUpdated, 'text-cyan-400'],
-            ['New This Week', `+${metrics.newThisWeek}`, 'text-green-400'],
           ].map(([label, value, color]) => (
-            <div key={label} className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5 backdrop-blur transition hover:border-zinc-700">
+            <div key={label} className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5 backdrop-blur">
               <p className="mb-3 text-xs uppercase tracking-[0.2em] text-zinc-500">{label}</p>
-              <h2 className={`text-3xl font-semibold ${color}`}>{value}</h2>
+              <h3 className={`text-3xl font-bold ${color}`}>{value}</h3>
             </div>
           ))}
         </div>
 
         <div className="mb-10 grid gap-6 lg:grid-cols-3">
-          <div className="h-[560px] rounded-2xl border border-zinc-800 bg-zinc-950/70 p-6 backdrop-blur lg:col-span-2">
-            <div className="mb-6 flex items-center justify-between gap-4">
+          <div className="h-[560px] rounded-2xl border border-zinc-800 bg-zinc-950/70 p-6 lg:col-span-2">
+            <div className="mb-6 flex items-center justify-between">
               <div>
                 <p className="mb-2 text-xs uppercase tracking-[0.2em] text-zinc-500">Geographic Intelligence</p>
-                <h3 className="text-2xl font-semibold text-white">Hiring Signal Map</h3>
+                <h3 className="text-2xl font-semibold text-white">Live Map of Hiring Signals</h3>
               </div>
               <p className="text-sm text-zinc-500">{metrics.mappedOpenings} mapped signals</p>
             </div>
             <JobSignalMap jobs={filteredJobs} />
           </div>
 
-          <div className="h-[560px] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/70 p-6 backdrop-blur">
+          <div className="h-[560px] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/70 p-6">
             <p className="mb-2 text-xs uppercase tracking-[0.2em] text-zinc-500">Event Stream</p>
             <h3 className="mb-6 text-2xl font-semibold text-white">Market Activity</h3>
             <div className="h-[455px] space-y-4 overflow-y-auto pr-2">
-              {loading ? (
-                <p className="text-zinc-500">Loading activity...</p>
-              ) : events.length === 0 ? (
-                <p className="text-zinc-500">No recent activity found.</p>
-              ) : (
-                events.map((event) => (
-                  <Link
-                    href={`/jobs/${event.job_id}`}
-                    key={event.id}
-                    className="block rounded-xl border border-zinc-800 bg-black p-4 transition hover:border-cyan-900"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={`mt-2 h-2 w-2 rounded-full ${eventColor(event.event_type)}`} />
-                      <div>
-                        <p className="text-sm text-zinc-200">{event.event_title}</p>
-                        <p className="mt-2 text-xs capitalize text-zinc-500">
-                          {event.event_type.replace('_', ' ')} · {new Date(event.created_at).toLocaleString()}
-                        </p>
-                      </div>
+              {loading ? <p className="text-zinc-500">Loading events...</p> : events.map((event) => (
+                <Link href={`/jobs/${event.job_id}`} key={event.id} className="block rounded-xl border border-zinc-800 bg-black p-4 transition hover:border-cyan-900">
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-2 h-2 w-2 rounded-full ${eventColor(event.event_type)}`} />
+                    <div>
+                      <p className="text-sm text-zinc-200">{event.event_title}</p>
+                      <p className="mt-2 text-xs text-zinc-500">{event.event_type.replace('_', ' ')} · {new Date(event.created_at).toLocaleString()}</p>
                     </div>
-                  </Link>
-                ))
-              )}
+                  </div>
+                </Link>
+              ))}
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-6 backdrop-blur">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-6">
           <div className="mb-8 flex items-center justify-between gap-4">
             <div>
               <p className="mb-2 text-xs uppercase tracking-[0.2em] text-zinc-500">Source Dataset</p>
               <h3 className="text-2xl font-semibold text-white">Job Records</h3>
             </div>
-            <p className="text-sm text-zinc-500">Showing {filteredJobs.length} filtered records</p>
+            <p className="text-sm text-zinc-500">Showing {visibleJobs.length} of {filteredJobs.length} records</p>
           </div>
 
           <div className="space-y-3">
-            {filteredJobs.map((job) => (
-              <Link
-                href={`/jobs/${job.id}`}
-                key={job.id}
-                className="grid items-center gap-4 rounded-xl border border-zinc-900 bg-black p-4 transition hover:border-cyan-900 md:grid-cols-6"
-              >
-                <div className="md:col-span-2">
-                  <p className="font-medium text-zinc-100">{job.title}</p>
-                  <p className="text-sm text-zinc-500">{job.company}</p>
-                </div>
+            {visibleJobs.map((job) => (
+              <div key={job.id} className="rounded-xl border border-zinc-900 bg-black p-4 transition hover:border-cyan-900">
+                <Link href={`/jobs/${job.id}`} className="grid gap-4 md:grid-cols-6 md:items-start">
+                  <div className="md:col-span-2">
+                    <p className="font-medium text-white">{job.title}</p>
+                    <p className="text-sm text-zinc-500">{job.company}</p>
+                  </div>
 
-                <div>
-                  <p className="text-sm text-zinc-400">{job.location}</p>
-                </div>
+                  <div>
+                    <p className="text-sm text-zinc-400">{job.location}</p>
+                  </div>
 
-                <div>
-                  <p className="text-sm text-cyan-400">{displayPay(job)}</p>
-                </div>
+                  <div>
+                    <p className="text-sm text-cyan-300">{formatPay(job)}</p>
+                  </div>
 
-                <div>
-                  <p className="text-xs uppercase tracking-[0.15em] text-zinc-500">Status</p>
-                  <p className="text-sm text-zinc-200">{displayStatus(job)}</p>
-                </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.15em] text-zinc-500">Status</p>
+                    <p className="text-sm capitalize text-zinc-200">{formatStatus(job)}</p>
+                  </div>
 
-                <div className="text-right">
-                  <p className="text-xs uppercase tracking-[0.15em] text-zinc-500">Last updated</p>
-                  <p className="text-sm text-zinc-200">{new Date(job.last_seen || job.created_at).toLocaleDateString()}</p>
-                </div>
-              </Link>
+                  <div className="md:text-right">
+                    <p className="text-xs uppercase tracking-[0.15em] text-zinc-500">Last Updated</p>
+                    <p className="text-sm text-zinc-200">{new Date(job.last_seen || job.created_at).toLocaleDateString()}</p>
+                  </div>
+                </Link>
+
+                {(job.description || job.requirements || job.benefits) && (
+                  <div className="mt-4 border-t border-zinc-900 pt-4">
+                    <CollapsibleText
+                      text={job.description || job.requirements || job.benefits}
+                      previewCharacters={260}
+                    />
+                  </div>
+                )}
+              </div>
             ))}
           </div>
+
+          {visibleJobCount < filteredJobs.length && (
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setVisibleJobCount((count) => count + JOB_INCREMENT)}
+                className="rounded-xl border border-zinc-700 px-5 py-3 text-sm font-medium text-zinc-200 transition hover:border-cyan-500 hover:text-white"
+              >
+                See more records
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </main>

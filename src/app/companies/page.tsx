@@ -1,156 +1,71 @@
-import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 
-export default async function CompaniesPage() {
-  const [{ data: companies }, { data: jobs }, { data: events }] = await Promise.all([
-    supabase
-      .from('companies')
-      .select('*')
-      .not('name', 'ilike', '%tesla%')
-      .order('expansion_score', { ascending: false }),
-    supabase
-      .from('jobs')
-      .select('id, company, title, location, salary, pay_range, source, last_seen, created_at')
-      .neq('source', 'manual')
-      .limit(500),
-    supabase
-      .from('job_events')
-      .select('id, event_type, metadata, created_at')
-      .order('created_at', { ascending: false })
-      .limit(500),
-  ])
-
-  const companyRows = (companies || []).map((company) => {
-    const companyJobs = (jobs || []).filter((job) => job.company === company.name)
-    const companyEvents = (events || []).filter(
-      (event) => event.metadata?.company === company.name
-    )
-
-    const salaryEvents = companyEvents.filter(
-      (event) => event.event_type === 'salary_changed'
-    ).length
-
-    return {
-      ...company,
-      jobCount: companyJobs.length,
-      eventCount: companyEvents.length,
-      salaryEvents,
-    }
-  })
+export default function CompaniesPage() {
+  const mockCompanies = [
+    {
+      id: "1",
+      name: "Tesla",
+      industry: "Automotive / Energy",
+      hq: "Austin, TX",
+      jobs: 142,
+    },
+    {
+      id: "2",
+      name: "OpenAI",
+      industry: "Artificial Intelligence",
+      hq: "San Francisco, CA",
+      jobs: 28,
+    },
+  ]
 
   return (
-    <main className="min-h-screen bg-black text-white">
-      <div className="border-b border-zinc-900 bg-zinc-950/80">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
-          <div>
-            <Link href="/dashboard" className="text-zinc-500 text-sm hover:text-cyan-400">
-              ← Dashboard
-            </Link>
-            <h1 className="text-3xl font-bold mt-2">Employer Intelligence Directory</h1>
-          </div>
+    <div className="min-h-screen bg-[#090909] text-zinc-100">
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold tracking-tight text-white">
+            Companies
+          </h1>
 
-          <p className="text-xs uppercase tracking-[0.2em] text-cyan-500">
-            Dossier Mode
+          <p className="mt-2 text-zinc-400">
+            Company hiring intelligence and labor market activity.
           </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {mockCompanies.map((company) => (
+            <a
+              key={company.id}
+              href={`/companies/${company.id}`}
+              className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-5 hover:border-zinc-700 transition-colors"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-white">
+                    {company.name}
+                  </h2>
+
+                  <p className="mt-1 text-sm text-zinc-400">
+                    {company.industry}
+                  </p>
+
+                  <p className="mt-2 text-sm text-zinc-500">
+                    HQ: {company.hq}
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <div className="text-2xl font-semibold text-white">
+                    {company.jobs}
+                  </div>
+
+                  <div className="text-xs uppercase tracking-wide text-zinc-500">
+                    Active Jobs
+                  </div>
+                </div>
+              </div>
+            </a>
+          ))}
         </div>
       </div>
-
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="mb-10">
-          <p className="text-zinc-500 uppercase tracking-[0.25em] text-xs mb-3">
-            Directory
-          </p>
-
-          <h2 className="text-5xl font-bold tracking-tight mb-2">
-            Tracked Employers
-          </h2>
-
-          <p className="text-zinc-400 text-xl">
-            Company dossiers, hiring velocity, employer metadata, and labor-market signal ranking.
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-4 gap-4 mb-10">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5">
-            <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-3">
-              Employers
-            </p>
-            <p className="text-3xl font-bold text-cyan-400">{companyRows.length}</p>
-          </div>
-
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5">
-            <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-3">
-              Openings
-            </p>
-            <p className="text-3xl font-bold text-green-400">{(jobs || []).length}</p>
-          </div>
-
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5">
-            <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-3">
-              Events
-            </p>
-            <p className="text-3xl font-bold text-cyan-400">{(events || []).length}</p>
-          </div>
-
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5">
-            <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-3">
-              Enrichment
-            </p>
-            <p className="text-3xl font-bold text-amber-400">
-              {companyRows.filter((company) => company.enriched_at).length}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6">
-          <div className="grid grid-cols-7 gap-4 text-xs uppercase tracking-[0.18em] text-zinc-600 border-b border-zinc-900 pb-4 mb-4">
-            <div className="col-span-2">Employer</div>
-            <div>Industry</div>
-            <div>Openings</div>
-            <div>Events</div>
-            <div>HQ</div>
-            <div className="text-right">Expansion</div>
-          </div>
-
-          <div className="space-y-2">
-            {companyRows.length === 0 ? (
-              <p className="text-zinc-500">No employers tracked yet.</p>
-            ) : (
-              companyRows.map((company) => (
-                <Link
-                  href={`/companies/${encodeURIComponent(company.name)}`}
-                  key={company.id}
-                  className="grid grid-cols-7 gap-4 items-center border border-zinc-900 rounded-xl p-4 bg-black hover:border-cyan-900 transition"
-                >
-                  <div className="col-span-2">
-                    <p className="font-medium">{company.name}</p>
-                    <p className="text-zinc-500 text-sm">
-                      {company.enriched_at ? 'Dossier enriched' : 'Dossier pending'}
-                    </p>
-                  </div>
-
-                  <div className="text-zinc-300 text-sm">
-                    {company.industry || 'Unknown'}
-                  </div>
-
-                  <div className="text-cyan-400">{company.jobCount}</div>
-                  <div className="text-zinc-300">{company.eventCount}</div>
-
-                  <div className="text-zinc-400 text-sm">
-                    {company.headquarters || 'Unknown'}
-                  </div>
-
-                  <div className="text-right">
-                    <p className="text-amber-400 font-semibold">
-                      {Math.round(company.expansion_score || 0)}
-                    </p>
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-    </main>
+    </div>
   )
 }

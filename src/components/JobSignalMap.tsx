@@ -139,11 +139,15 @@ export default function JobSignalMap({ jobs }: { jobs: MapJob[] }) {
       setStatus('Mapbox loaded with an error. Check console.')
     })
 
-    setTimeout(() => {
-      map.resize()
-      setStatus('')
-    }, 2000)
+const resizeTimer = setTimeout(() => {
+  if (map) {
+    map.resize()
+  }
 
+  setStatus('')
+}, 2000)
+
+return () => clearTimeout(resizeTimer)
     return () => {
       markersRef.current.forEach((marker) => marker.remove())
       markersRef.current = []
