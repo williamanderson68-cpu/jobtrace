@@ -1,53 +1,180 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import "mapbox-gl/dist/mapbox-gl.css";
 
-const SIGNALS = [
+type Signal = {
+  region: string;
+  count: number;
+  city: string;
+  coordinates: [number, number];
+  industries: string[];
+  companies: string[];
+  latest: string;
+};
+
+const SIGNALS: Signal[] = [
   {
     region: "Bay Area Core",
     count: 122,
     city: "San Francisco",
+    coordinates: [-122.4194, 37.7749],
     industries: ["Artificial Intelligence", "Cloud", "Software"],
     companies: ["Anthropic", "OpenAI", "Databricks", "Cloudflare"],
     latest: "2 minutes ago",
-    x: "30%",
-    y: "30%",
   },
   {
     region: "South Bay",
     count: 11,
     city: "Santa Clara",
+    coordinates: [-121.9552, 37.3541],
     industries: ["Semiconductors", "Infrastructure", "Hardware"],
     companies: ["NVIDIA", "Tesla", "Applied Materials"],
     latest: "8 minutes ago",
-    x: "52%",
-    y: "58%",
-  },
-  {
-    region: "Remote / Distributed",
-    count: 105,
-    city: "Distributed",
-    industries: ["Remote", "Operations", "Software"],
-    companies: ["Reddit", "GitLab", "Figma"],
-    latest: "1 minute ago",
-    x: "70%",
-    y: "42%",
   },
   {
     region: "East Bay",
     count: 37,
     city: "Oakland",
+    coordinates: [-122.2711, 37.8044],
     industries: ["Logistics", "Construction", "Operations"],
     companies: ["ABC", "Clear Water Services", "Chime"],
     latest: "11 minutes ago",
-    x: "43%",
-    y: "39%",
+  },
+  {
+    region: "Remote / Distributed",
+    count: 105,
+    city: "Distributed",
+    coordinates: [-121.8863, 37.3382],
+    industries: ["Remote", "Operations", "Software"],
+    companies: ["Reddit", "GitLab", "Figma"],
+    latest: "1 minute ago",
   },
 ];
 
 export default function MapExplorer() {
-  const [selected, setSelected] = useState(SIGNALS[0]);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
+  const markerElementsRef = useRef<HTMLButtonElement[]>([]);
+  const [selected, setSelected] = useState<Signal>(SIGNALS[0]);
+  const [mapboxReady, setMapboxReady] = useState(false);
+  const [fallbackReason, setFallbackReason] = useState<string | null>(null);
+
+  function updateMarkerStyles(activeRegion: string) {
+    markerElementsRef.current.forEach((el) => {
+      const isActive = el.dataset.region === activeRegion;
+      el.className = isActive
+        ? "h-5 w-5 rounded-full border-2 border-white bg-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.8)] transition-transform"
+        : "h-3.5 w-3.5 rounded-full border border-cyan-100/80 bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.45)] transition-transform hover:scale-125";
+    });
+  }
+
+  function flyToSignal(signal: Signal) {
+    setSelected(signal);
+    updateMarkerStyles(signal.region);
+
+    if (mapRef.current && typeof mapRef.current.easeTo === "function") {
+      mapRef.current.easeTo({
+        center: signal.coordinates,
+        zoom: 8.8,
+        duration: 650,
+      });
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function loadMapbox() {
+      const token =
+        process.env.NEXT_PUBLIC_MAPBOX_TOKEN ||
+        process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+
+      if (!token) {
+        setFallbackReason("missing Mapbox token");
+        return;
+      }
+
+      if (!mapContainerRef.current) {
+        setFallbackReason("map container not ready");
+        return;
+      }
+
+      try {
+        const mapboxglModule = await import("mapbox-gl");
+        const mapboxgl = mapboxglModule.default;
+
+        if (cancelled || !mapContainerRef.current) return;
+
+        mapboxgl.accessToken = token;
+
+        const map = new mapboxgl.Map({
+          container: mapContainerRef.current,
+          style: "mapbox://styles/mapbox/dark-v11",
+          center: [-122.05, 37.62],
+          zoom: 7.45,
+          attributionControl: true,
+        });
+
+        mapRef.current = map;
+        map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+
+        map.on("load", () => {
+          if (cancelled) return;
+          setMapboxReady(true);
+
+          resizeTimer = setTimeout(() => {
+            if (!cancelled && mapRef.current && typeof mapRef.current.resize === "function") {
+              mapRef.current.resize();
+            }
+          }, 300);
+        });
+
+        SIGNALS.forEach((signal) => {
+          const el = document.createElement("button");
+          el.type = "button";
+          el.dataset.region = signal.region;
+          el.setAttribute("aria-label", signal.region);
+          el.className =
+            signal.region === selected.region
+              ? "h-5 w-5 rounded-full border-2 border-white bg-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.8)] transition-transform"
+              : "h-3.5 w-3.5 rounded-full border border-cyan-100/80 bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.45)] transition-transform hover:scale-125";
+
+          el.addEventListener("click", () => flyToSignal(signal));
+
+          const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
+            .setLngLat(signal.coordinates)
+            .addTo(map);
+
+          markersRef.current.push(marker);
+          markerElementsRef.current.push(el);
+        });
+      } catch (error: any) {
+        setFallbackReason(error?.message || "Mapbox failed to load");
+      }
+    }
+
+    loadMapbox();
+
+    return () => {
+      cancelled = true;
+      if (resizeTimer) clearTimeout(resizeTimer);
+
+      markersRef.current.forEach((marker) => {
+        if (marker && typeof marker.remove === "function") marker.remove();
+      });
+      markersRef.current = [];
+      markerElementsRef.current = [];
+
+      if (mapRef.current && typeof mapRef.current.remove === "function") {
+        mapRef.current.remove();
+      }
+      mapRef.current = null;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#090909] text-zinc-100">
@@ -79,8 +206,8 @@ export default function MapExplorer() {
         </div>
       </header>
 
-      <main className="grid min-h-[calc(100vh-73px)] grid-cols-[360px_1fr_420px]">
-        <aside className="border-r border-zinc-800 bg-black/40 p-6">
+      <main className="grid min-h-[calc(100vh-73px)] grid-cols-[340px_1fr_420px]">
+        <aside className="border-r border-zinc-800 bg-black/50 p-6">
           <div className="text-xs uppercase tracking-[0.35em] text-zinc-600">
             Regional Signals
           </div>
@@ -97,7 +224,7 @@ export default function MapExplorer() {
             {SIGNALS.map((signal) => (
               <button
                 key={signal.region}
-                onClick={() => setSelected(signal)}
+                onClick={() => flyToSignal(signal)}
                 className={`w-full rounded-xl border p-4 text-left transition ${
                   selected.region === signal.region
                     ? "border-cyan-400/50 bg-cyan-950/20"
@@ -124,53 +251,34 @@ export default function MapExplorer() {
         </aside>
 
         <section className="relative overflow-hidden bg-[#030303]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.08),transparent_60%)]" />
-          <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.05)_1px,transparent_1px)] [background-size:80px_80px]" />
+          <div ref={mapContainerRef} className="h-full min-h-[calc(100vh-73px)] w-full" />
 
-          <div className="absolute left-8 top-8 rounded-2xl border border-zinc-800 bg-black/70 p-5 backdrop-blur">
-            <div className="text-xs uppercase tracking-[0.35em] text-zinc-600">
-              Active Region
-            </div>
-            <div className="mt-2 text-2xl font-semibold text-white">
-              {selected.region}
-            </div>
-          </div>
-
-          {SIGNALS.map((signal) => (
-            <button
-              key={signal.region}
-              onClick={() => setSelected(signal)}
-              className="absolute -translate-x-1/2 -translate-y-1/2 transition hover:scale-110"
-              style={{ left: signal.x, top: signal.y }}
-            >
-              <div
-                className={`absolute -left-12 -top-12 h-24 w-24 rounded-full ${
-                  selected.region === signal.region
-                    ? "bg-cyan-400/30 animate-ping"
-                    : "bg-cyan-400/10"
-                }`}
-              />
-              <div className="absolute -left-16 -top-16 h-32 w-32 rounded-full bg-cyan-400/20 blur-2xl" />
-              <div className="relative flex h-8 w-8 items-center justify-center rounded-full border border-cyan-100 bg-cyan-400 shadow-[0_0_60px_#22d3ee]">
-                <div className="h-3 w-3 rounded-full bg-white" />
+          {!mapboxReady && !fallbackReason && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/90 p-6 text-center">
+                <div className="mx-auto h-3 w-3 animate-pulse rounded-full bg-cyan-400 shadow-[0_0_25px_#22d3ee]" />
+                <div className="mt-4 text-sm uppercase tracking-[0.3em] text-zinc-500">
+                  Loading Mapbox
+                </div>
               </div>
-              <div className="mt-3 whitespace-nowrap rounded-full border border-zinc-800 bg-black/80 px-3 py-1 text-xs text-zinc-300">
-                {signal.region}
-              </div>
-            </button>
-          ))}
+            </div>
+          )}
 
-          <div className="absolute bottom-8 left-8 rounded-2xl border border-zinc-800 bg-black/70 p-5 backdrop-blur">
-            <div className="text-xs uppercase tracking-[0.35em] text-zinc-600">
-              Map Status
+          {fallbackReason && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black">
+              <div className="max-w-lg rounded-2xl border border-amber-900/50 bg-amber-950/20 p-6 text-amber-100">
+                <div className="text-xs uppercase tracking-[0.35em] text-amber-300">
+                  Mapbox Fallback
+                </div>
+                <div className="mt-3 text-2xl font-semibold text-white">
+                  Map could not load
+                </div>
+                <div className="mt-3 text-sm text-amber-200">
+                  {fallbackReason}
+                </div>
+              </div>
             </div>
-            <div className="mt-3 flex items-center gap-3">
-              <span className="h-3 w-3 rounded-full bg-emerald-400" />
-              <span className="text-sm text-zinc-300">
-                Exploratory signal layer active
-              </span>
-            </div>
-          </div>
+          )}
         </section>
 
         <aside className="border-l border-zinc-800 bg-black/50 p-6">
