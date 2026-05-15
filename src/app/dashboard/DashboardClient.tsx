@@ -1,7 +1,7 @@
-
 "use client";
 
 import JobSignalMap from "@/components/JobSignalMap";
+import DashboardEventStream from "@/components/DashboardEventStream";
 
 export default function DashboardClient() {
   return (
@@ -33,6 +33,14 @@ export default function DashboardClient() {
               Companies
             </a>
 
+            <a href="/map" className="hover:text-white transition">
+              Map
+            </a>
+
+            <a href="/events" className="hover:text-white transition">
+              Events
+            </a>
+
             <a href="/" className="hover:text-white transition">
               Search
             </a>
@@ -47,11 +55,11 @@ export default function DashboardClient() {
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1 text-zinc-400">
-            Last updated: live session
+            Timeline engine online
           </div>
 
           <div className="rounded-full border border-cyan-900/60 bg-cyan-950/40 px-3 py-1 text-cyan-300">
-            +30 new signals today
+            Event stream connected
           </div>
 
           <div className="rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1 text-zinc-400">
@@ -78,7 +86,7 @@ export default function DashboardClient() {
             ["Jobs Tracked", "300", "text-cyan-300"],
             ["Companies Hiring", "17", "text-white"],
             ["Mapped Signals", "238", "text-emerald-300"],
-            ["New Signals", "+30", "text-emerald-300"],
+            ["Timeline Events", "Live", "text-emerald-300"],
             ["Regions Active", "8", "text-cyan-300"],
             ["Cities Covered", "107", "text-white"],
           ].map(([label, value, color]) => (
@@ -110,15 +118,12 @@ export default function DashboardClient() {
                 </h2>
               </div>
 
-              <div className="rounded-xl border border-zinc-800 bg-black/40 px-4 py-3 text-right">
-                <div className="text-xs uppercase tracking-[0.25em] text-zinc-600">
-                  Active Signals
-                </div>
-
-                <div className="mt-1 text-3xl font-semibold text-cyan-300">
-                  238
-                </div>
-              </div>
+              <a
+                href="/map"
+                className="rounded-xl border border-cyan-900/50 bg-cyan-950/20 px-4 py-3 text-sm font-medium text-cyan-200 hover:border-cyan-400/60 hover:text-white"
+              >
+                Open full map →
+              </a>
             </div>
 
             <JobSignalMap />
@@ -133,33 +138,8 @@ export default function DashboardClient() {
               Market Activity
             </h2>
 
-            <div className="mt-6 space-y-4">
-              {[
-                "New AI hiring activity detected in San Francisco",
-                "Construction signal increase in South Bay",
-                "New employer added: Clear Water Services",
-                "Remote hiring cluster expanded",
-                "Logistics hiring activity detected",
-              ].map((item, index) => (
-                <div
-                  key={index}
-                  className="rounded-xl border border-zinc-800 bg-black/30 p-4"
-                >
-                  <div className="flex gap-3">
-                    <div className="mt-1 h-2 w-2 rounded-full bg-cyan-400" />
-
-                    <div>
-                      <div className="text-sm leading-relaxed text-zinc-200">
-                        {item}
-                      </div>
-
-                      <div className="mt-2 text-xs text-zinc-500">
-                        live signal event
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="mt-6">
+              <DashboardEventStream limit={6} />
             </div>
           </div>
         </div>
