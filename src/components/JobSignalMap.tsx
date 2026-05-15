@@ -17,12 +17,14 @@ type MapJob = {
 export default function JobSignalMap({ jobs }: { jobs: MapJob[] }) {
   const mapContainer = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
-  const [status, setStatus] = useState('Loading map tiles...')
+  const markersRef = useRef<mapboxgl.Marker[]>([])
+  const [status, setStatus] = useState('Loading map...')
 
   const mappedJobs = jobs.filter((job) => job.latitude && job.longitude)
-  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
 
   useEffect(() => {
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+
     if (!token) {
       setStatus('Missing NEXT_PUBLIC_MAPBOX_TOKEN')
       return
@@ -36,75 +38,78 @@ export default function JobSignalMap({ jobs }: { jobs: MapJob[] }) {
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
       center: [-122.18, 37.85],
-      zoom: 5.5,
+      zoom: 6,
       attributionControl: true,
     })
+
     mapRef.current = map
 
     map.addControl(new mapboxgl.NavigationControl(), 'top-right')
 
-    const finishLoading = () => {
-      map.resize()
+    map.on('load', () => {
       setStatus('')
-    }
+      map.resize()
+    })
 
-    map.on('load', finishLoading)
-    map.on('style.load', finishLoading)
-    map.on('idle', finishLoading)
+    map.on('idle', () => {
+      setStatus('')
+      map.resize()
+    })
 
     map.on('error', (event) => {
       console.error('Mapbox error:', event)
-      setStatus('Mapbox error. Check browser console.')
+      setStatus('Mapbox loaded with an error. Check console.')
     })
 
     setTimeout(() => {
       map.resize()
       setStatus('')
-    }, 2500)
+    }, 2000)
 
     return () => {
+      markersRef.current.forEach((marker) => marker.remove())
+      markersRef.current = []
       map.remove()
       mapRef.current = null
     }
-  }, [token])
+  }, [])
 
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
 
-    const existingMarkers = document.querySelectorAll('.jobtrace-map-marker')
-    existingMarkers.forEach((marker) => marker.remove())
+    markersRef.current.forEach((marker) => marker.remove())
+    markersRef.current = []
+
+    if (mappedJobs.length === 0) return
 
     const bounds = new mapboxgl.LngLatBounds()
 
     mappedJobs.forEach((job) => {
       if (!job.latitude || !job.longitude) return
 
-      const markerElement = document.createElement('a')
-      markerElement.href = `/jobs/${job.id}`
-      markerElement.className =
-        'jobtrace-map-marker block h-4 w-4 rounded-full bg-cyan-400 border border-white shadow-[0_0_20px_rgba(34,211,238,1)]'
-
-      const popup = new mapboxgl.Popup({
-        offset: 16,
-      }).setHTML(`
-        <div style="color:#111827;font-family:system-ui;">
+      const popup = new mapboxgl.Popup({ offset: 18 }).setHTML(`
+        <div style="color:#111827;font-family:system-ui;min-width:180px;">
           <strong>${job.company}</strong><br/>
           <span>${job.title}</span><br/>
           <span style="color:#4b5563;">${job.location}</span><br/>
-          <span style="color:#0891b2;">${job.salary || job.pay_range || 'Salary not listed'}</span>
+          <span style="color:#0891b2;">${job.salary || job.pay_range || 'Salary not listed'}</span><br/>
+          <a href="/jobs/${job.id}" style="display:inline-block;margin-top:8px;color:#0891b2;font-weight:700;">
+            Open intelligence file
+          </a>
         </div>
       `)
 
-      new mapboxgl.Marker(markerElement)
+      const marker = new mapboxgl.Marker({ color: '#22d3ee' })
         .setLngLat([Number(job.longitude), Number(job.latitude)])
         .setPopup(popup)
         .addTo(map)
 
+      markersRef.current.push(marker)
       bounds.extend([Number(job.longitude), Number(job.latitude)])
     })
 
-    if (mappedJobs.length > 0) {
+    if (!bounds.isEmpty()) {
       map.fitBounds(bounds, {
         padding: 80,
         maxZoom: 10,
@@ -114,17 +119,33 @@ export default function JobSignalMap({ jobs }: { jobs: MapJob[] }) {
   }, [mappedJobs.length])
 
   return (
-    <div className="h-[460px] rounded-2xl border border-zinc-800 overflow-hidden relative bg-black">
+    <div
+      className="relative rounded-2xl border border-zinc-800 overflow-hidden bg-zinc-950"
+      style={{
+        height: '460px',
+        width: '100%',
+        minHeight: '460px',
+      }}
+    >
       {status && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black">
           <div className="text-center">
-            <div className="h-3 w-3 bg-cyan-400 rounded-full animate-pulse mx-auto mb-4" />
+            <div className="h-3 w-3 rounded-full bg-cyan-400 animate-pulse mx-auto mb-4" />
             <p className="text-zinc-500">{status}</p>
           </div>
         </div>
       )}
 
-      <div ref={mapContainer} className="absolute inset-0" />
+      <div
+        ref={mapContainer}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          minHeight: '460px',
+        }}
+      />
     </div>
   )
 }
