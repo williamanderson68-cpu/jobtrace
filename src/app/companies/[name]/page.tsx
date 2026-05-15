@@ -1,6 +1,13 @@
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
+type NewsItem = {
+  title: string
+  summary: string
+  source: string
+  url?: string
+}
+
 export default async function CompanyDetailPage({
   params,
 }: {
@@ -34,6 +41,9 @@ export default async function CompanyDetailPage({
   const repostEvents = companyEvents.filter(
     (event) => event.event_type === 'reposted'
   )
+  const recentNews = Array.isArray(company?.recent_news)
+    ? (company.recent_news as NewsItem[])
+    : []
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -55,7 +65,7 @@ export default async function CompanyDetailPage({
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="mb-10">
           <p className="text-zinc-500 uppercase tracking-[0.25em] text-xs mb-3">
-            Employer
+            Employer Dossier
           </p>
 
           <h2 className="text-6xl font-bold tracking-tight mb-3">
@@ -63,8 +73,91 @@ export default async function CompanyDetailPage({
           </h2>
 
           <p className="text-zinc-400 text-xl">
-            Hiring behavior, tracked postings, and labor market signal history.
+            {company?.industry || 'Industry pending'} · {company?.headquarters || 'HQ pending'}
           </p>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-6 mb-10">
+          <div className="lg:col-span-2 bg-zinc-950 border border-zinc-900 rounded-2xl p-6">
+            <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-2">
+              Company Bio
+            </p>
+
+            <h3 className="text-2xl font-semibold mb-4">
+              Organizational Profile
+            </h3>
+
+            <p className="text-zinc-300 leading-7">
+              {company?.company_bio ||
+                'No company bio has been enriched yet. Run the company enrichment endpoint to populate this dossier.'}
+            </p>
+
+            <div className="grid md:grid-cols-3 gap-4 mt-8">
+              <div className="bg-black border border-zinc-900 rounded-xl p-4">
+                <p className="text-zinc-500 text-xs uppercase tracking-[0.15em] mb-2">
+                  Industry
+                </p>
+                <p className="text-zinc-200">{company?.industry || 'Unknown'}</p>
+              </div>
+
+              <div className="bg-black border border-zinc-900 rounded-xl p-4">
+                <p className="text-zinc-500 text-xs uppercase tracking-[0.15em] mb-2">
+                  Headquarters
+                </p>
+                <p className="text-zinc-200">{company?.headquarters || 'Unknown'}</p>
+              </div>
+
+              <div className="bg-black border border-zinc-900 rounded-xl p-4">
+                <p className="text-zinc-500 text-xs uppercase tracking-[0.15em] mb-2">
+                  Website
+                </p>
+                {company?.website ? (
+                  <a
+                    href={company.website}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-cyan-400 hover:text-cyan-300"
+                  >
+                    Open site
+                  </a>
+                ) : (
+                  <p className="text-zinc-600">Unknown</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6">
+            <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-2">
+              Signal Scorecard
+            </p>
+
+            <div className="space-y-5 mt-6">
+              <div>
+                <p className="text-zinc-500 text-sm">Openings</p>
+                <p className="text-4xl font-bold text-cyan-400">{activeJobs.length}</p>
+              </div>
+
+              <div>
+                <p className="text-zinc-500 text-sm">Tracked Events</p>
+                <p className="text-4xl font-bold text-green-400">{companyEvents.length}</p>
+              </div>
+
+              <div>
+                <p className="text-zinc-500 text-sm">Expansion Score</p>
+                <p className="text-4xl font-bold text-amber-400">
+                  {Math.round(company?.expansion_score || activeJobs.length * 8)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-zinc-500 text-sm">Dossier Status</p>
+                <p className="text-cyan-400">
+                  {company?.enriched_at ? 'Enriched' : 'Pending'}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-5 gap-4 mb-10">
@@ -98,11 +191,53 @@ export default async function CompanyDetailPage({
 
           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5">
             <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-3">
-              Expansion
+              News Items
             </p>
-            <p className="text-3xl font-bold text-cyan-400">
-              {Math.round(company?.expansion_score || activeJobs.length * 8)}
+            <p className="text-3xl font-bold text-cyan-400">{recentNews.length}</p>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-6 mb-10">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6">
+            <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-2">
+              Intelligence Summary
             </p>
+
+            <h3 className="text-2xl font-semibold mb-6">
+              Analyst Readout
+            </h3>
+
+            <p className="text-zinc-300 leading-7">
+              {company?.intelligence_summary ||
+                'No analyst summary has been enriched yet. This section will combine company metadata, hiring behavior, event velocity, and external signals.'}
+            </p>
+          </div>
+
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6">
+            <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-2">
+              Current Events / News
+            </p>
+
+            <h3 className="text-2xl font-semibold mb-6">
+              External Context
+            </h3>
+
+            <div className="space-y-4">
+              {recentNews.length === 0 ? (
+                <p className="text-zinc-500">No company news items enriched yet.</p>
+              ) : (
+                recentNews.map((item, index) => (
+                  <div
+                    key={`${item.title}-${index}`}
+                    className="border border-zinc-900 bg-black rounded-xl p-4"
+                  >
+                    <p className="font-medium">{item.title}</p>
+                    <p className="text-zinc-400 text-sm mt-2">{item.summary}</p>
+                    <p className="text-zinc-600 text-xs mt-3">{item.source}</p>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
@@ -176,36 +311,6 @@ export default async function CompanyDetailPage({
                   </Link>
                 ))
               )}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6">
-          <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-2">
-            Interpretation
-          </p>
-
-          <h3 className="text-2xl font-semibold mb-6">
-            Employer Labor Signal Readout
-          </h3>
-
-          <div className="grid md:grid-cols-3 gap-5 text-sm">
-            <div className="border-l-2 border-cyan-500 pl-4">
-              <p className="text-zinc-300">
-                Opening count measures current footprint in the tracked labor market.
-              </p>
-            </div>
-
-            <div className="border-l-2 border-green-500 pl-4">
-              <p className="text-zinc-300">
-                Salary events become early compensation pressure signals as the dataset grows.
-              </p>
-            </div>
-
-            <div className="border-l-2 border-amber-500 pl-4">
-              <p className="text-zinc-300">
-                Repost and repeated-observation behavior can indicate difficult-to-fill roles or evergreen hiring.
-              </p>
             </div>
           </div>
         </div>

@@ -26,10 +26,6 @@ export default async function CompaniesPage() {
       (event) => event.metadata?.company === company.name
     )
 
-    const createdEvents = companyEvents.filter(
-      (event) => event.event_type === 'created'
-    ).length
-
     const salaryEvents = companyEvents.filter(
       (event) => event.event_type === 'salary_changed'
     ).length
@@ -38,7 +34,6 @@ export default async function CompaniesPage() {
       ...company,
       jobCount: companyJobs.length,
       eventCount: companyEvents.length,
-      createdEvents,
       salaryEvents,
     }
   })
@@ -55,7 +50,7 @@ export default async function CompaniesPage() {
           </div>
 
           <p className="text-xs uppercase tracking-[0.2em] text-cyan-500">
-            Company-Level Signals
+            Dossier Mode
           </p>
         </div>
       </div>
@@ -71,7 +66,7 @@ export default async function CompaniesPage() {
           </h2>
 
           <p className="text-zinc-400 text-xl">
-            Hiring velocity, event count, opening count, and expansion signal ranking.
+            Company dossiers, hiring velocity, employer metadata, and labor-market signal ranking.
           </p>
         </div>
 
@@ -99,18 +94,21 @@ export default async function CompaniesPage() {
 
           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5">
             <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-3">
-              Mode
+              Enrichment
             </p>
-            <p className="text-3xl font-bold text-amber-400">Live</p>
+            <p className="text-3xl font-bold text-amber-400">
+              {companyRows.filter((company) => company.enriched_at).length}
+            </p>
           </div>
         </div>
 
         <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6">
-          <div className="grid grid-cols-6 gap-4 text-xs uppercase tracking-[0.18em] text-zinc-600 border-b border-zinc-900 pb-4 mb-4">
+          <div className="grid grid-cols-7 gap-4 text-xs uppercase tracking-[0.18em] text-zinc-600 border-b border-zinc-900 pb-4 mb-4">
             <div className="col-span-2">Employer</div>
+            <div>Industry</div>
             <div>Openings</div>
             <div>Events</div>
-            <div>Salary Signals</div>
+            <div>HQ</div>
             <div className="text-right">Expansion</div>
           </div>
 
@@ -122,18 +120,25 @@ export default async function CompaniesPage() {
                 <Link
                   href={`/companies/${encodeURIComponent(company.name)}`}
                   key={company.id}
-                  className="grid grid-cols-6 gap-4 items-center border border-zinc-900 rounded-xl p-4 bg-black hover:border-cyan-900 transition"
+                  className="grid grid-cols-7 gap-4 items-center border border-zinc-900 rounded-xl p-4 bg-black hover:border-cyan-900 transition"
                 >
                   <div className="col-span-2">
                     <p className="font-medium">{company.name}</p>
                     <p className="text-zinc-500 text-sm">
-                      Last seen {new Date(company.last_seen || company.created_at).toLocaleDateString()}
+                      {company.enriched_at ? 'Dossier enriched' : 'Dossier pending'}
                     </p>
+                  </div>
+
+                  <div className="text-zinc-300 text-sm">
+                    {company.industry || 'Unknown'}
                   </div>
 
                   <div className="text-cyan-400">{company.jobCount}</div>
                   <div className="text-zinc-300">{company.eventCount}</div>
-                  <div className="text-green-400">{company.salaryEvents}</div>
+
+                  <div className="text-zinc-400 text-sm">
+                    {company.headquarters || 'Unknown'}
+                  </div>
 
                   <div className="text-right">
                     <p className="text-amber-400 font-semibold">
