@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { projectToNorCalMap } from '@/lib/geo'
+import JobSignalMap from '@/components/JobSignalMap'
 
 interface Job {
   id: number
@@ -100,28 +100,14 @@ export default function DashboardClient({
     setLoading(false)
   }
 
-  const mapPoints = useMemo(() => {
-    return jobs
-      .map((job) => {
-        const projected = projectToNorCalMap(job.latitude, job.longitude)
-        if (!projected) return null
-
-        return {
-          ...job,
-          x: projected.x,
-          y: projected.y,
-        }
-      })
-      .filter(Boolean) as Array<Job & { x: number; y: number }>
-  }, [jobs])
-
   const metrics = useMemo(() => {
     const repostEvents = events.filter((event) => event.event_type === 'reposted')
     const createdEvents = events.filter((event) => event.event_type === 'created')
+    const mappedJobs = jobs.filter((job) => job.latitude && job.longitude)
 
     return {
       activeOpenings: jobs.length,
-      mappedOpenings: mapPoints.length,
+      mappedOpenings: mappedJobs.length,
       eventCount: events.length,
       hiringVelocity: createdEvents.length,
       repostRate:
@@ -129,7 +115,7 @@ export default function DashboardClient({
       ghostRisk:
         repostEvents.length >= 5 ? 'Elevated' : repostEvents.length >= 2 ? 'Moderate' : 'Low',
     }
-  }, [jobs, events, mapPoints.length])
+  }, [jobs, events])
 
   const eventColor = (eventType: string) => {
     if (eventType === 'created') return 'bg-cyan-400'
@@ -162,10 +148,10 @@ export default function DashboardClient({
 
             <div className="text-right">
               <p className="text-xs uppercase tracking-[0.2em] text-cyan-500">
-                Real Data Mode
+                Real Map Layer
               </p>
               <p className="text-zinc-400 text-sm">
-                Click records for details
+                Mapbox-ready
               </p>
             </div>
           </div>
@@ -183,7 +169,7 @@ export default function DashboardClient({
           </h2>
 
           <p className="text-zinc-400 text-xl">
-            {location || 'Imported Greenhouse / Lever source data only'}
+            {location || 'Imported source data with geocoded labor signals'}
           </p>
         </div>
 
@@ -215,75 +201,19 @@ export default function DashboardClient({
                   Geographic Intelligence
                 </p>
                 <h3 className="text-2xl font-semibold">
-                  Northern California Hiring Signal Map
+                  Live Map of Hiring Signals
                 </h3>
               </div>
 
               <div className="flex gap-2 items-center">
                 <div className="h-3 w-3 rounded-full bg-cyan-400 animate-pulse" />
                 <span className="text-zinc-500 text-sm">
-                  {mapPoints.length} mapped signals
+                  {metrics.mappedOpenings} mapped signals
                 </span>
               </div>
             </div>
 
-            <div className="h-[460px] rounded-2xl border border-zinc-800 bg-black relative overflow-hidden">
-              <div className="absolute inset-0 bg-[linear-gradient(rgba(39,39,42,0.35)_1px,transparent_1px),linear-gradient(90deg,rgba(39,39,42,0.35)_1px,transparent_1px)] bg-[size:42px_42px]" />
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.11),transparent_62%)]" />
-
-              <svg
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-                className="absolute inset-0 h-full w-full opacity-50"
-              >
-                <path
-                  d="M19 5 L38 8 L52 18 L64 35 L72 55 L66 74 L55 93 L37 88 L27 72 L20 50 L14 31 Z"
-                  fill="rgba(24,24,27,0.75)"
-                  stroke="rgba(34,211,238,0.45)"
-                  strokeWidth="0.5"
-                />
-                <path
-                  d="M23 47 C31 43, 38 44, 45 49 C54 55, 62 54, 69 51"
-                  fill="none"
-                  stroke="rgba(34,211,238,0.25)"
-                  strokeWidth="0.35"
-                />
-              </svg>
-
-              {mapPoints.map((job, index) => (
-                <Link
-                  href={`/jobs/${job.id}`}
-                  key={`${job.id}-${index}`}
-                  className="absolute group"
-                  style={{
-                    left: `${job.x}%`,
-                    top: `${job.y}%`,
-                  }}
-                >
-                  <div className="absolute -left-4 -top-4 h-8 w-8 rounded-full bg-cyan-400/10 animate-ping" />
-                  <div className="relative h-3.5 w-3.5 bg-cyan-400 rounded-full shadow-[0_0_18px_rgba(34,211,238,0.95)]" />
-
-                  <div className="hidden group-hover:block absolute left-5 top-0 bg-black border border-zinc-800 rounded-lg p-3 w-64 z-20 shadow-2xl">
-                    <p className="font-medium text-sm">{job.company}</p>
-                    <p className="text-zinc-300 text-xs mt-1">{job.title}</p>
-                    <p className="text-zinc-500 text-xs mt-1">{job.location}</p>
-                    <p className="text-cyan-400 text-xs mt-2">{job.salary || job.pay_range || 'Salary not listed'}</p>
-                    <p className="text-zinc-600 text-[10px] uppercase tracking-[0.15em] mt-2">
-                      Click for intelligence file
-                    </p>
-                  </div>
-                </Link>
-              ))}
-
-              <div className="absolute bottom-6 left-6 bg-black/85 border border-zinc-800 rounded-xl px-4 py-3">
-                <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-1">
-                  Signal Source
-                </p>
-                <p className="text-cyan-400 font-semibold">
-                  Live imported jobs only
-                </p>
-              </div>
-            </div>
+            <JobSignalMap jobs={jobs} />
           </div>
 
           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 h-[560px] overflow-hidden">
@@ -376,29 +306,29 @@ export default function DashboardClient({
 
           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6">
             <p className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-2">
-              Product Navigation
+              Map Status
             </p>
 
             <h3 className="text-2xl font-semibold mb-6">
-              Intelligence Files
+              Tile Layer Upgrade
             </h3>
 
             <div className="space-y-5 text-sm">
               <div className="border-l-2 border-cyan-500 pl-4">
                 <p className="text-zinc-300">
-                  Click any job record to view its posting file, source URL, event timeline, and tracked changes.
+                  The dashboard now supports real Mapbox dark tiles instead of the black placeholder panel.
                 </p>
               </div>
 
               <div className="border-l-2 border-green-500 pl-4">
                 <p className="text-zinc-300">
-                  Click any employer to view company-level hiring velocity, openings, events, and expansion signals.
+                  Mapped jobs use stored latitude and longitude from the geocoding pipeline.
                 </p>
               </div>
 
               <div className="border-l-2 border-amber-500 pl-4">
                 <p className="text-zinc-300">
-                  The dashboard is now the overview layer. Jobs and employers have their own intelligence pages.
+                  Add NEXT_PUBLIC_MAPBOX_TOKEN to activate the full live map layer.
                 </p>
               </div>
             </div>
@@ -453,9 +383,11 @@ export default function DashboardClient({
 
                   <div>
                     <p className="text-zinc-500 text-xs uppercase tracking-[0.15em]">
-                      Source
+                      Coordinates
                     </p>
-                    <p className="text-sm">{job.source || 'unknown'}</p>
+                    <p className="text-sm">
+                      {job.latitude && job.longitude ? 'mapped' : 'pending'}
+                    </p>
                   </div>
 
                   <div className="text-right">
