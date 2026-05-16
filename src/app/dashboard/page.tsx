@@ -13,12 +13,23 @@ type JobRow = {
   } | null;
 };
 
+export type AiJob = {
+  id: string;
+  title: string;
+  company: string;
+  ai_score: number | null;
+  wage_transparency_score: number | null;
+  ai_exposure_score: number | null;
+  real_job_confidence: number | null;
+};
+
 export type AiInsights = {
   analyzedCount: number;
   avgScore: number | null;
   avgWageTransparency: number | null;
   topExposure: { id: string; title: string; company: string; score: number }[];
   topConfidence: { id: string; title: string; company: string; score: number }[];
+  jobs: AiJob[];
 };
 
 export default async function DashboardPage() {
@@ -55,6 +66,15 @@ export default async function DashboardPage() {
     avgWageTransparency,
     topExposure,
     topConfidence,
+    jobs: jobs.map((j) => ({
+      id: j.id,
+      title: j.title,
+      company: j.company,
+      ai_score: j.ai_score,
+      wage_transparency_score: j.ai_analysis?.wage_transparency_score ?? null,
+      ai_exposure_score: j.ai_analysis?.ai_exposure_score ?? null,
+      real_job_confidence: j.ai_analysis?.real_job_confidence ?? null,
+    })),
   };
 
   return <DashboardClient aiInsights={aiInsights} />;

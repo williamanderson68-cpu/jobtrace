@@ -1,10 +1,25 @@
 "use client";
 
+import { useState } from "react";
 import JobSignalMap from "@/components/JobSignalMap";
 import DashboardEventStream from "@/components/DashboardEventStream";
 import type { AiInsights } from "./page";
 
 export default function DashboardClient({ aiInsights }: { aiInsights: AiInsights }) {
+  const [minScore, setMinScore] = useState("");
+  const [minWage, setMinWage] = useState("");
+  const [maxExposure, setMaxExposure] = useState("");
+  const [highConfOnly, setHighConfOnly] = useState(false);
+
+  const filtersActive = minScore !== "" || minWage !== "" || maxExposure !== "" || highConfOnly;
+
+  const filteredJobs = aiInsights.jobs.filter((j) => {
+    if (minScore !== "" && (j.ai_score ?? 0) < Number(minScore)) return false;
+    if (minWage !== "" && (j.wage_transparency_score ?? 0) < Number(minWage)) return false;
+    if (maxExposure !== "" && (j.ai_exposure_score ?? 100) > Number(maxExposure)) return false;
+    if (highConfOnly && (j.real_job_confidence ?? 0) < 75) return false;
+    return true;
+  });
   return (
     <div className="min-h-screen bg-[#090909] text-zinc-100">
       <header className="border-b border-zinc-800 bg-black/70 backdrop-blur">
@@ -123,6 +138,105 @@ export default function DashboardClient({ aiInsights }: { aiInsights: AiInsights
                   <div className={`mt-4 text-5xl font-semibold ${color}`}>{value}</div>
                 </div>
               ))}
+            </div>
+
+            <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
+              <div className="mb-4 text-xs uppercase tracking-[0.25em] text-zinc-600">
+                Filter Analyzed Jobs
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase tracking-wide text-zinc-600">Min AI Score</span>
+                  <input
+                    type="number" min="0" max="100" placeholder="0"
+                    value={minScore}
+                    onChange={(e) => setMinScore(e.target.value)}
+                    className="w-24 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-zinc-500"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase tracking-wide text-zinc-600">Min Wage Transparency</span>
+                  <input
+                    type="number" min="0" max="100" placeholder="0"
+                    value={minWage}
+                    onChange={(e) => setMinWage(e.target.value)}
+                    className="w-24 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-zinc-500"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase tracking-wide text-zinc-600">Max AI Exposure</span>
+                  <input
+                    type="number" min="0" max="100" placeholder="100"
+                    value={maxExposure}
+                    onChange={(e) => setMaxExposure(e.target.value)}
+                    className="w-24 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-zinc-500"
+                  />
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer self-end pb-1.5">
+                  <input
+                    type="checkbox"
+                    checked={highConfOnly}
+                    onChange={(e) => setHighConfOnly(e.target.checked)}
+                    className="h-4 w-4 accent-cyan-400"
+                  />
+                  <span className="text-sm text-zinc-400">High confidence only</span>
+                </label>
+
+                {filtersActive && (
+                  <button
+                    onClick={() => { setMinScore(""); setMinWage(""); setMaxExposure(""); setHighConfOnly(false); }}
+                    className="self-end pb-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {filtersActive && (
+                <div className="mt-4">
+                  <div className="mb-3 text-xs text-zinc-500">
+                    {filteredJobs.length} of {aiInsights.analyzedCount} jobs match
+                  </div>
+                  {filteredJobs.length === 0 ? (
+                    <p className="text-sm text-zinc-600">No jobs match the current filters.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {filteredJobs.slice(0, 10).map((job) => (
+                        <li key={job.id}>
+                          <a
+                            href={`/jobs/${job.id}`}
+                            className="flex items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-black/30 px-4 py-3 hover:border-zinc-700 transition"
+                          >
+                            <div className="min-w-0">
+                              <div className="truncate text-sm text-zinc-200">{job.title}</div>
+                              <div className="mt-0.5 truncate text-xs text-zinc-500">{job.company}</div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-3 text-xs">
+                              {job.ai_score != null && (
+                                <span className="text-cyan-300">Score {job.ai_score}</span>
+                              )}
+                              {job.real_job_confidence != null && (
+                                <span className={job.real_job_confidence >= 75 ? "text-emerald-300" : job.real_job_confidence >= 40 ? "text-amber-300" : "text-red-400"}>
+                                  Conf {job.real_job_confidence}
+                                </span>
+                              )}
+                            </div>
+                          </a>
+                        </li>
+                      ))}
+                      {filteredJobs.length > 10 && (
+                        <li className="pt-1 text-xs text-zinc-600">
+                          + {filteredJobs.length - 10} more jobs not shown
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
