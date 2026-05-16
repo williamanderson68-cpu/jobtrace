@@ -16,6 +16,10 @@ function extractJson(text: string) {
 }
 
 export async function POST() {
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json({ error: "OPENAI_API_KEY is not configured" }, { status: 500 });
+  }
+
   try {
     const { data: jobs, error: fetchError } = await supabase
       .from("jobs")
@@ -86,6 +90,11 @@ ${JSON.stringify(job, null, 2)}
         results.push({ jobId: job.id, ok: false, error: err.message ?? "Unknown error" });
       }
     }
+
+    const analyzedIds = results.filter((r) => r.ok).map((r) => r.jobId);
+    const failedIds = results.filter((r) => !r.ok).map((r) => r.jobId);
+    if (analyzedIds.length) console.log("[analyze-missing-jobs] analyzed:", analyzedIds);
+    if (failedIds.length) console.error("[analyze-missing-jobs] failed:", failedIds);
 
     return NextResponse.json({ ok: true, analyzed, failed, results });
   } catch (err: any) {

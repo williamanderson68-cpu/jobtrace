@@ -15,6 +15,10 @@ function extractJson(text: string) {
 }
 
 export async function analyzeJob(jobId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!process.env.OPENAI_API_KEY) {
+    return { ok: false, error: "OPENAI_API_KEY is not configured" };
+  }
+
   const { data: job, error: jobError } = await supabase
     .from("jobs")
     .select("*")
@@ -26,6 +30,7 @@ export async function analyzeJob(jobId: string): Promise<{ ok: boolean; error?: 
   }
 
   if (job.ai_analysis != null) {
+    console.log(`[analyze-job] skipped ${jobId} — already analyzed`);
     return { ok: true };
   }
 
@@ -74,8 +79,11 @@ ${JSON.stringify(job, null, 2)}
       return { ok: false, error: updateError.message };
     }
 
+    console.log(`[analyze-job] analyzed ${jobId}`);
     return { ok: true };
   } catch (err: any) {
-    return { ok: false, error: err.message ?? "AI analysis failed" };
+    const message = err.message ?? "AI analysis failed";
+    console.error(`[analyze-job] failed ${jobId}:`, message);
+    return { ok: false, error: message };
   }
 }
