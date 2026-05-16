@@ -8,6 +8,26 @@ export default function AdminPage() {
   const [result, setResult] = useState<Record<string, unknown> | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const [batchLoading, setBatchLoading] = useState(false)
+  const [batchResult, setBatchResult] = useState<Record<string, unknown> | null>(null)
+  const [batchError, setBatchError] = useState<string | null>(null)
+
+  async function handleBatch() {
+    setBatchLoading(true)
+    setBatchResult(null)
+    setBatchError(null)
+    try {
+      const res = await fetch("/api/admin/analyze-missing-jobs", { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`)
+      setBatchResult(data)
+    } catch (err) {
+      setBatchError(err instanceof Error ? err.message : "Unknown error")
+    } finally {
+      setBatchLoading(false)
+    }
+  }
+
   async function handleAnalyze() {
     if (!jobId.trim()) return
     setLoading(true)
@@ -133,6 +153,69 @@ export default function AdminPage() {
                   {JSON.stringify(result, null, 2)}
                 </pre>
               </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950/70 p-6">
+          <h2 className="text-lg font-semibold text-white">Batch AI Analysis</h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Find up to 10 jobs missing AI analysis and process them in one shot.
+          </p>
+
+          <div className="mt-4">
+            <button
+              onClick={handleBatch}
+              disabled={batchLoading}
+              className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-600 disabled:opacity-40"
+            >
+              {batchLoading ? "Running…" : "Analyze 10 Missing Jobs"}
+            </button>
+          </div>
+
+          {batchError && (
+            <div className="mt-4 rounded-lg border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-400">
+              {batchError}
+            </div>
+          )}
+
+          {batchResult && (
+            <div className="mt-4 space-y-4">
+              <div className="flex items-center gap-6 text-sm">
+                <span className="text-zinc-400">
+                  Analyzed:{" "}
+                  <span className="font-semibold text-white">
+                    {String(batchResult.analyzed)}
+                  </span>
+                </span>
+                <span className="text-zinc-400">
+                  Failed:{" "}
+                  <span className="font-semibold text-white">
+                    {String(batchResult.failed)}
+                  </span>
+                </span>
+              </div>
+
+              {Array.isArray(batchResult.results) && batchResult.results.length > 0 && (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    Results
+                  </p>
+                  <ul className="space-y-1">
+                    {(batchResult.results as { jobId: string; ok: boolean; error?: string }[]).map((r) => (
+                      <li key={r.jobId} className="flex items-center gap-2 text-xs">
+                        <span className={r.ok ? "text-green-400" : "text-red-400"}>
+                          {r.ok ? "✓" : "✗"}
+                        </span>
+                        <span className="text-zinc-400">Job {r.jobId}</span>
+                        {r.error && (
+                          <span className="text-red-400">{r.error}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </div>
