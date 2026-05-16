@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { analyzeJob } from "./analyze-job";
 
 type ImportedJob = {
   url: string;
@@ -91,6 +92,10 @@ export async function runJobImport() {
       imported: 0,
       error: error.message,
     };
+  }
+
+  if (data?.length) {
+    await Promise.allSettled(data.map((job) => analyzeJob(job.id)));
   }
 
   return {

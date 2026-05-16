@@ -35,6 +35,21 @@ export default async function JobDetailPage({
   const lastSeen = job.last_seen || job.last_checked_at || job.created_at
   const companyUrl = `/companies/${encodeURIComponent(job.company)}`
 
+  const ai = job.ai_analysis as {
+    real_job_confidence?: number
+    wage_transparency_score?: number
+    ai_exposure_score?: number
+  } | null
+
+  function confidenceBadge(score: number | undefined) {
+    if (score == null) return null
+    if (score >= 75) return { label: 'High Confidence', classes: 'border-emerald-800 bg-emerald-950/40 text-emerald-300' }
+    if (score >= 40) return { label: 'Medium Confidence', classes: 'border-amber-800 bg-amber-950/40 text-amber-300' }
+    return { label: 'Low Confidence', classes: 'border-red-800 bg-red-950/40 text-red-300' }
+  }
+
+  const badge = confidenceBadge(ai?.real_job_confidence)
+
   const salaryEvents = (events || []).filter(
     (event) => event.event_type === 'salary_changed'
   )
@@ -197,6 +212,60 @@ export default async function JobDetailPage({
             </p>
           </div>
         </div>
+
+        {ai && (
+          <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
+            <p className="text-xs uppercase tracking-[0.25em] text-zinc-600 mb-4">
+              AI Intelligence
+            </p>
+
+            <div className="flex flex-wrap items-center gap-3 mb-5">
+              {job.ai_score != null && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs uppercase tracking-wide text-zinc-500">Score</span>
+                  <span className="text-3xl font-bold text-cyan-300">{job.ai_score}</span>
+                </div>
+              )}
+
+              {badge && (
+                <span className={`rounded-full border px-3 py-1 text-xs font-medium ${badge.classes}`}>
+                  {badge.label}
+                </span>
+              )}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 mb-5">
+              {ai.wage_transparency_score != null && (
+                <div className="rounded-xl border border-zinc-800 bg-black p-4">
+                  <p className="text-xs uppercase tracking-[0.15em] text-zinc-500 mb-1">
+                    Wage Transparency
+                  </p>
+                  <p className="text-2xl font-semibold text-white">{ai.wage_transparency_score}</p>
+                  <p className="text-xs text-zinc-600 mt-1">out of 100</p>
+                </div>
+              )}
+
+              {ai.ai_exposure_score != null && (
+                <div className="rounded-xl border border-zinc-800 bg-black p-4">
+                  <p className="text-xs uppercase tracking-[0.15em] text-zinc-500 mb-1">
+                    AI Exposure
+                  </p>
+                  <p className="text-2xl font-semibold text-white">{ai.ai_exposure_score}</p>
+                  <p className="text-xs text-zinc-600 mt-1">out of 100</p>
+                </div>
+              )}
+            </div>
+
+            {job.ai_summary && (
+              <div className="rounded-xl border border-zinc-800 bg-black p-4">
+                <p className="text-xs uppercase tracking-[0.15em] text-zinc-500 mb-2">
+                  Summary
+                </p>
+                <p className="text-sm leading-relaxed text-zinc-300">{job.ai_summary}</p>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-2 gap-6">
           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6">

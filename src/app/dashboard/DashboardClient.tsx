@@ -2,8 +2,9 @@
 
 import JobSignalMap from "@/components/JobSignalMap";
 import DashboardEventStream from "@/components/DashboardEventStream";
+import type { AiInsights } from "./page";
 
-export default function DashboardClient() {
+export default function DashboardClient({ aiInsights }: { aiInsights: AiInsights }) {
   return (
     <div className="min-h-screen bg-[#090909] text-zinc-100">
       <header className="border-b border-zinc-800 bg-black/70 backdrop-blur">
@@ -104,6 +105,81 @@ export default function DashboardClient() {
             </div>
           ))}
         </div>
+
+        {aiInsights.analyzedCount > 0 ? (
+          <div className="mb-10">
+            <div className="mb-4 text-xs uppercase tracking-[0.35em] text-zinc-600">
+              AI Insights
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+              {[
+                ["Jobs Analyzed", String(aiInsights.analyzedCount), "text-white"],
+                ["Avg AI Score", aiInsights.avgScore != null ? String(aiInsights.avgScore) : "—", "text-cyan-300"],
+                ["Avg Wage Transparency", aiInsights.avgWageTransparency != null ? String(aiInsights.avgWageTransparency) : "—", "text-emerald-300"],
+              ].map(([label, value, color]) => (
+                <div key={label} className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
+                  <div className="text-xs uppercase tracking-[0.25em] text-zinc-600">{label}</div>
+                  <div className={`mt-4 text-5xl font-semibold ${color}`}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
+                <div className="mb-4 text-xs uppercase tracking-[0.25em] text-zinc-600">
+                  Highest AI Exposure
+                </div>
+                {aiInsights.topExposure.length === 0 ? (
+                  <p className="text-sm text-zinc-600">No data yet.</p>
+                ) : (
+                  <ol className="space-y-3">
+                    {aiInsights.topExposure.map((job, i) => (
+                      <li key={job.id}>
+                        <a href={`/jobs/${job.id}`} className="flex items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-black/30 px-4 py-3 hover:border-zinc-700 transition">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-zinc-600">#{i + 1}</span>
+                              <span className="truncate text-sm text-zinc-200">{job.title}</span>
+                            </div>
+                            <div className="mt-0.5 truncate text-xs text-zinc-500">{job.company}</div>
+                          </div>
+                          <span className="shrink-0 text-lg font-semibold text-amber-300">{job.score}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
+                <div className="mb-4 text-xs uppercase tracking-[0.25em] text-zinc-600">
+                  Highest Confidence Jobs
+                </div>
+                {aiInsights.topConfidence.length === 0 ? (
+                  <p className="text-sm text-zinc-600">No data yet.</p>
+                ) : (
+                  <ol className="space-y-3">
+                    {aiInsights.topConfidence.map((job, i) => (
+                      <li key={job.id}>
+                        <a href={`/jobs/${job.id}`} className="flex items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-black/30 px-4 py-3 hover:border-zinc-700 transition">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-zinc-600">#{i + 1}</span>
+                              <span className="truncate text-sm text-zinc-200">{job.title}</span>
+                            </div>
+                            <div className="mt-0.5 truncate text-xs text-zinc-500">{job.company}</div>
+                          </div>
+                          <span className="shrink-0 text-lg font-semibold text-emerald-300">{job.score}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="grid gap-6 lg:grid-cols-[1.7fr_0.8fr]">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-6">
